@@ -1,10 +1,23 @@
 //! This module integrations this application with the graphics engine.
 
 use std::f32::consts::TAU;
-use graphics::{Camera, ControlScheme, DeviceEvent, EngineUpdates, InputSettings, Lighting, LightType, PointLight, Scene, UiLayout, UiSettings};
+
+use graphics::{
+    Camera, ControlScheme, DeviceEvent, EngineUpdates, InputSettings, LightType, Lighting,
+    PointLight, Scene, UiLayout, UiSettings,
+};
 use lin_alg::f32::{Quaternion, Vec3};
-use crate::State;
-use crate::ui::ui_handler;
+
+use crate::{ui::ui_handler, State};
+
+type Color = (f32, f32, f32);
+
+const WINDOW_TITLE: &str = "Causal gravity model";
+const WINDOW_SIZE_X: f32 = 1_800.;
+const WINDOW_SIZE_Y: f32 = 1_400.;
+const BACKGROUND_COLOR: Color = (0.5, 0.5, 0.5);
+
+const RENDER_DIST: f32 = 200.;
 
 fn event_handler(
     _state: &mut State,
@@ -28,7 +41,7 @@ pub fn render(state: State) {
         camera: Camera {
             fov_y: TAU / 8.,
             position: Vec3::new(0., 10., -20.),
-            far: crate::ui::RENDER_DIST,
+            far: RENDER_DIST,
             orientation: Quaternion::from_axis_angle(Vec3::new(1., 0., 0.), TAU / 16.),
             ..Default::default()
         },
@@ -56,9 +69,9 @@ pub fn render(state: State) {
                 },
             ],
         },
-        background_color: crate::ui::BACKGROUND_COLOR,
-        window_size: (crate::ui::WINDOW_SIZE_X, crate::ui::WINDOW_SIZE_Y),
-        window_title: crate::ui::WINDOW_TITLE.to_owned(),
+        background_color: BACKGROUND_COLOR,
+        window_size: (WINDOW_SIZE_X, WINDOW_SIZE_Y),
+        window_title: WINDOW_TITLE.to_owned(),
     };
 
     let input_settings = InputSettings {

@@ -1,14 +1,16 @@
-use rand::Rng; // Add this to use the random number generator
 use std::f64::consts::TAU;
 
 use lin_alg::f64::Vec3;
+use rand::Rng;
 
-mod ui;
+use crate::{playback::SnapShot, render::render};
+// Add this to use the random number generator
+
 mod playback;
 mod render;
+mod ui;
 // todo: What if you have total electric charge different from a whole number? Misc elec "particles"
 // todo zipping around in the either, to be capture.
-
 
 // todo: Next, try having the electrons add up to more than 1 charge.
 // todo: Try to quantify the elec density, so you can compare it to Schrodinger.
@@ -19,10 +21,8 @@ const Q_ELEC: f64 = -1.;
 // If two particles are closer to each other than this, don't count accel, or cap it.
 const MIN_DIST: f64 = 0.1;
 
-
 // Don't calculate force if particles are farther than this from each other. Computation saver.
 // const MAX_DIST: f64 = 0.1;
-
 
 pub struct Config {
     num_timesteps: usize,
@@ -35,23 +35,22 @@ impl Default for Config {
         Self {
             num_timesteps: 1_000,
             dt_integration: 0.01,
-            dt_pulse: 0.01
+            dt_pulse: 0.01,
         }
     }
 }
 
 #[derive(Default)]
 pub struct StateUi {
-    snapshot_selected: usize
+    snapshot_selected: usize,
 }
-
 
 #[derive(Default)]
 struct State {
     config: Config,
     ui: StateUi,
     bodies: Vec<Body>,
-    snapshots: Vec<SnapShot>
+    snapshots: Vec<SnapShot>,
 }
 
 struct Body {
@@ -59,36 +58,40 @@ struct Body {
     vel: Vec3,
 }
 
-// (radius, charge_in_radius)
-fn density(elec_posits: &[Vec3f32], q_per_elec: f64, center_ref: Vec3f32) -> Vec<((f32, f32), f32)> {
-    // Must be ascending radii for the below code to work.
-    let per_elec = q_per_elec as f32;
-
-    // Equidistant ish, for now.
-    let mut result = vec![
-        ((0.0, 0.2), 0.),
-        ((0.2, 0.4),0.),
-        ((0.4, 0.6),0.),
-        ((0.8, 1.), 0.),
-        ((1., 1.2),0.),
-        ((1.2, 1.4),0.),
-        ((1.4, 1.6), 0.),
-        ((1.6, 1.8), 0.),
-        ((1.8, 2.0), 0.),
-        ((2.0, 9999.), 0.),
-    ];
-
-    for (r_bound, q) in &mut result {
-        for posit in elec_posits {
-            let mag = (center_ref - *posit).magnitude();
-            if mag < r_bound.1 && mag > r_bound.0 {
-                *q += per_elec;
-            }
-        }
-    }
-
-    result
-}
+// // (radius, charge_in_radius)
+// fn density(
+//     elec_posits: &[Vec3f32],
+//     q_per_elec: f64,
+//     center_ref: Vec3f32,
+// ) -> Vec<((f32, f32), f32)> {
+//     // Must be ascending radii for the below code to work.
+//     let per_elec = q_per_elec as f32;
+//
+//     // Equidistant ish, for now.
+//     let mut result = vec![
+//         ((0.0, 0.2), 0.),
+//         ((0.2, 0.4), 0.),
+//         ((0.4, 0.6), 0.),
+//         ((0.8, 1.), 0.),
+//         ((1., 1.2), 0.),
+//         ((1.2, 1.4), 0.),
+//         ((1.4, 1.6), 0.),
+//         ((1.6, 1.8), 0.),
+//         ((1.8, 2.0), 0.),
+//         ((2.0, 9999.), 0.),
+//     ];
+//
+//     for (r_bound, q) in &mut result {
+//         for posit in elec_posits {
+//             let mag = (center_ref - *posit).magnitude();
+//             if mag < r_bound.1 && mag > r_bound.0 {
+//                 *q += per_elec;
+//             }
+//         }
+//     }
+//
+//     result
+// }
 
 /// Calculate the Coulomb or gravitational acceleration on a particle, from a single other particle.
 fn accel(
@@ -97,7 +100,7 @@ fn accel(
     q_acted_on: f64,
     q_actor: f64,
     mass_acted_on: f64,
-    nuc_actor: bool
+    nuc_actor: bool,
 ) -> Vec3 {
     let posit_diff = posit_acted_on - posit_actor;
     let dist = posit_diff.magnitude();
@@ -143,7 +146,6 @@ fn accel(
 //         elec.posit += (k1_posit + k2_posit * 2. + k3_posit * 2. + k4_posit) / 6.;
 //     }
 // }
-
 
 // fn run(n_elecs: usize, n_timesteps: usize, dt: f64) -> Vec<SnapShot> {
 //     let mut snapshots = Vec::new();
@@ -208,27 +210,84 @@ fn accel(
 //     snapshots
 // }
 
-/// Entry point for computation; rename A/R.
-fn build(state: &mut State) {
-    for t in 0..state.config.num_timesteps {
+/// A rectangular prism for sampling properties (generally an "infinitessimal" volume.
+struct SampleRect {
+    pub start: Vec3,
+    pub end: Vec3,
+}
 
+impl SampleRect {
+    fn measure_properties(&self, rays: &[GravRay]) -> SampleProperties {
+        let volume = {
+            let dist_x = self.end.x - self.start.x;
+            let dist_y = self.end.y - self.start.y;
+            let dist_z = self.end.z - self.start.z;
+
+            (dist_x.powi(2) + dist_y.powi(2) + dist_z.powi(2)).sqrt()
+        };
+
+        let mut num_rays = 0;
+        for ray in rays {
+            if ray.data.x >= self.start.x
+                && ray.data.x <= self.end.x
+                && ray.data.y >= self.start.y
+                && ray.data.y <= self.end.y
+                && ray.data.z >= self.start.z
+                && ray.data.z <= self.end.z
+            {
+                num_rays += 1;
+            }
+        }
+
+        // todo: To calculate div and curl, we need multiple sets of rays.
+
+        SampleProperties {
+            charge_density: num_rays as f64 / volume,
+            div: 0.,
+            curl: 0.,
+        }
     }
 }
 
+/// Our model "particle" that travels outward from a source
+struct GravRay {
+    /// The magnitude corresponds to source mass. Direction is outward
+    /// at any angle from the source.
+    data: Vec3,
+}
+
+#[derive(Debug)]
+struct SampleProperties {
+    charge_density: f64,
+    /// Divergence
+    div: f64,
+    curl: f64,
+}
+
+/// Entry point for computation; rename A/R.
+fn build(state: &mut State) {
+    for t in 0..state.config.num_timesteps {}
+}
 
 fn main() {
     println!("Building snapshots...");
     let mut state = State::default();
 
     state.bodies = vec![
-        Body {posit: Vec3::new_zero(), vel: Vec3::new_zero() },
-        Body {posit: Vec3::new(1., 0., 0.), vel: Vec3::new_zero() },
+        Body {
+            posit: Vec3::new_zero(),
+            vel: Vec3::new_zero(),
+        },
+        Body {
+            posit: Vec3::new(1., 0., 0.),
+            vel: Vec3::new_zero(),
+        },
     ];
 
     build(&mut state);
 
     println!("Complete. Rendering...");
-    ui::render(state);
+    render(state);
     // let snapshots = run(200, 50_000, 0.001);
     // let snapshots = run(1, 1000_000, 0.0001);
 }
