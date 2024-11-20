@@ -1,23 +1,31 @@
-//! This module integrations this application with the graphics engine.
+//! This module integraties this application with the graphics engine.
 
 use std::f32::consts::TAU;
 
 use graphics::{
-    Camera, ControlScheme, DeviceEvent, EngineUpdates, InputSettings, LightType, Lighting,
-    PointLight, Scene, UiLayout, UiSettings,
+    Camera, ControlScheme, DeviceEvent, EngineUpdates, Entity, InputSettings, LightType, Lighting,
+    Mesh, PointLight, Scene, UiLayout, UiSettings,
 };
 use lin_alg::f32::{Quaternion, Vec3};
 
-use crate::{ui::ui_handler, State};
+use crate::{playback::change_snapshot, ui::ui_handler, State};
 
 type Color = (f32, f32, f32);
 
 const WINDOW_TITLE: &str = "Causal gravity model";
-const WINDOW_SIZE_X: f32 = 1_800.;
-const WINDOW_SIZE_Y: f32 = 1_400.;
+const WINDOW_SIZE_X: f32 = 1_600.;
+const WINDOW_SIZE_Y: f32 = 1_000.;
 const BACKGROUND_COLOR: Color = (0.5, 0.5, 0.5);
 
 const RENDER_DIST: f32 = 200.;
+
+pub const BODY_SIZE: f32 = 0.5;
+pub const BODY_SHINYNESS: f32 = 2.;
+pub const BODY_COLOR: Color = (0., 1.0, 0.5);
+
+pub const RAY_SIZE: f32 = 0.02;
+pub const RAY_SHINYNESS: f32 = 2.;
+pub const RAY_COLOR: Color = (1., 1.0, 0.2);
 
 fn event_handler(
     _state: &mut State,
@@ -36,7 +44,7 @@ fn render_handler(_state: &mut State, _scene: &mut Scene, _dt: f32) -> EngineUpd
 /// Entry point to our render and event loop.
 pub fn render(state: State) {
     let mut scene = Scene {
-        meshes: Vec::new(),   // updated below.
+        meshes: vec![Mesh::new_sphere(1., 12, 12)],
         entities: Vec::new(), // updated below.
         camera: Camera {
             fov_y: TAU / 8.,
@@ -82,6 +90,14 @@ pub fn render(state: State) {
         layout: UiLayout::Top,
         icon_path: Some("./resources/icon.png".to_owned()),
     };
+
+    // Initialize entities.
+    if !state.snapshots.is_empty() {
+        change_snapshot(
+            &mut scene.entities,
+            &state.snapshots[state.ui.snapshot_selected],
+        )
+    }
 
     graphics::run(
         state,

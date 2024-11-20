@@ -1,9 +1,7 @@
-use std::f32::consts::TAU;
-
 use egui::{Context, Slider, TopBottomPanel};
 use graphics::{EngineUpdates, Scene};
 
-use crate::State;
+use crate::{playback::change_snapshot, State};
 
 const SLIDER_WIDTH: f32 = 460.;
 const SLIDER_WIDTH_ORIENTATION: f32 = 100.;
@@ -17,17 +15,26 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
     let mut engine_updates = EngineUpdates::default();
 
     TopBottomPanel::top("0").show(ctx, |ui| {
-        // todo: Wider values on larger windows?
-        // todo: Delegate the numbers etc here to consts etc.
         ui.spacing_mut().slider_width = SLIDER_WIDTH;
 
         ui.horizontal(|ui| {
             ui.add_space(COL_SPACING);
             ui.label("Time:");
+
+            let snapshot_prev = state.ui.snapshot_selected;
             ui.add(Slider::new(
                 &mut state.ui.snapshot_selected,
-                0..=state.snapshots.len(),
+                0..=state.snapshots.len() - 1,
             ));
+
+            if state.ui.snapshot_selected != snapshot_prev {
+                change_snapshot(
+                    &mut scene.entities,
+                    &state.snapshots[state.ui.snapshot_selected],
+                );
+
+                engine_updates.entities = true;
+            }
         });
 
         ui.add_space(ROW_SPACING / 2.);

@@ -1,6 +1,8 @@
-use std::f64::{consts::TAU, MAX};
+#![allow(non_snake_case)]
 
-use lin_alg::f64::Vec3;
+use std::f64::consts::TAU;
+
+use lin_alg::{f32::Vec3 as Vec3f32, f64::Vec3};
 use rand::Rng;
 
 use crate::{playback::SnapShot, render::render};
@@ -21,7 +23,13 @@ const Q_ELEC: f64 = -1.;
 // If two particles are closer to each other than this, don't count accel, or cap it.
 const MIN_DIST: f64 = 0.1;
 
-const MAX_RAY_DIST: f64 = 100.; // todo: Adjust this approach A/R.
+const MAX_RAY_DIST: f64 = 30.; // todo: Adjust this approach A/R.
+
+const C: f64 = 10.;
+
+// todo: A/R
+// This cubed is d-volume
+const RAY_SAMPLE_WIDTH: f64 = 0.1;
 
 // Don't calculate force if particles are farther than this from each other. Computation saver.
 // const MAX_DIST: f64 = 0.1;
@@ -36,8 +44,8 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            num_timesteps: 1_000,
-            dt_integration: 0.01,
+            num_timesteps: 2_000,
+            dt_integration: 0.001,
             dt_pulse: 0.01,
             num_rays_per_iter: 40,
         }
@@ -62,21 +70,27 @@ impl State {
     /// Remove rays that are far from the area of interest, for performance reasons.
     /// todo: This is crude; improve it to be more efficient.
     fn remove_far_rays(&mut self) {
-        let mut removed_rays = Vec::new();
+        self.rays.retain(|ray| {
+            ray.posit.x <= MAX_RAY_DIST
+                && ray.posit.y <= MAX_RAY_DIST
+                && ray.posit.z <= MAX_RAY_DIST
+        });
+    }
 
-        for (i, ray) in self.rays.iter().enumerate() {
-            if ray.posit.x > MAX_RAY_DIST
-                || ray.posit.y > MAX_RAY_DIST
-                || ray.posit.z > MAX_RAY_DIST
-            {
-                removed_rays.push(i);
-                continue;
-            }
-        }
-
-        for i in removed_rays {
-            self.rays.remove(i);
-        }
+    fn take_snapshot(&mut self, time: usize) {
+        self.snapshots.push(SnapShot {
+            time,
+            body_posits: self
+                .bodies
+                .iter()
+                .map(|b| Vec3f32::new(b.posit.x as f32, b.posit.y as f32, b.posit.z as f32))
+                .collect(),
+            rays: self
+                .rays
+                .iter()
+                .map(|r| Vec3f32::new(r.posit.x as f32, r.posit.y as f32, r.posit.z as f32))
+                .collect(),
+        })
     }
 }
 
@@ -92,6 +106,8 @@ impl Body {
     pub fn create_ray(&self) -> GravRay {
         let mut rng = rand::thread_rng();
 
+        // todo: This isn't random; it has a problem of creating poles of high density.
+
         let theta = rng.gen_range(0.0..TAU); // Random angle in [0, 𝜏)
         let phi = rng.gen_range(0.0..TAU / 2.); // Random angle in [0, 𝜏/2]
 
@@ -102,7 +118,8 @@ impl Body {
 
         GravRay {
             posit: self.posit,
-            vel: unit_vec * self.mass,
+            vel: unit_vec * C,
+            src_mass: self.mass,
         }
     }
 }
@@ -142,147 +159,111 @@ impl Body {
 //     result
 // }
 
-/// Calculate the Coulomb or gravitational acceleration on a particle, from a single other particle.
-fn accel(
-    posit_acted_on: Vec3,
-    posit_actor: Vec3,
-    q_acted_on: f64,
-    q_actor: f64,
-    mass_acted_on: f64,
-    nuc_actor: bool,
-) -> Vec3 {
-    let posit_diff = posit_acted_on - posit_actor;
-    let dist = posit_diff.magnitude();
+// /// Calculate the Coulomb or gravitational acceleration on a particle, from a single other particle.
+// fn accel(
+//     posit_acted_on: Vec3,
+//     posit_actor: Vec3,
+//     q_acted_on: f64,
+//     q_actor: f64,
+//     mass_acted_on: f64,
+//     nuc_actor: bool,
+// ) -> Vec3 {
+//     let posit_diff = posit_acted_on - posit_actor;
+//     let dist = posit_diff.magnitude();
+//
+//     let posit_diff_unit = posit_diff / dist;
+//
+//     // Note: We factor out KC * Q_PROT, since they are present in every calculation.
+//     // Calculate the Coulomb force between nuclei.
+//
+//     let f_mag = q_acted_on * q_actor / dist.powi(2);
+//
+//     // todo: Solving the nuc-toss-out problem.
+//     if nuc_actor && dist < 0.1 {
+//         // println!("Min dist: {:?} Force: {:?}", dist, f_mag);
+//         return Vec3::new_zero();
+//     }
+//
+//     if dist < MIN_DIST {
+//         println!("Min dist: {:?} Force: {:?}", dist, f_mag);
+//         return Vec3::new_zero();
+//     }
+//
+//     posit_diff_unit * f_mag / mass_acted_on
+// }
 
-    let posit_diff_unit = posit_diff / dist;
+/// Calculate the force acting on a body, given the local environment of gravity rays around it.
+fn accel(body: &Body, rays: &[GravRay]) -> Vec3 {
+    let rect = SampleRect::new(body.posit, RAY_SAMPLE_WIDTH);
+    let properties = rect.measure_properties(rays);
 
-    // Note: We factor out KC * Q_PROT, since they are present in every calculation.
-    // Calculate the Coulomb force between nuclei.
+    // todo: QC this etc
+    // Potential
+    let V = properties.ray_density;
 
-    let f_mag = q_acted_on * q_actor / dist.powi(2);
+    // todo: Is this the divergence property, or should we take the gradient using finite difference
+    // todo from two sample rect locations?
+    let gradient = Vec3::new_zero();
 
-    // todo: Solving the nuc-toss-out problem.
-    if nuc_actor && dist < 0.1 {
-        // println!("Min dist: {:?} Force: {:?}", dist, f_mag);
-        return Vec3::new_zero();
-    }
+    // todo: We may be missing part of the puzzle.
+    // let force = gradient * body.mass;
 
-    if dist < MIN_DIST {
-        println!("Min dist: {:?} Force: {:?}", dist, f_mag);
-        return Vec3::new_zero();
-    }
+    // a = F / m
+    // force / body.mass
 
-    posit_diff_unit * f_mag / mass_acted_on
+    gradient / body.mass
 }
 
-fn integrate_rk4(bodies: &mut [Body], dt: f64) {
-    for body in bodies.iter_mut() {
-        // Step 1: Calculate the k-values for position and velocity
-        let k1_v = body.accel * dt;
-        let k1_posit = body.vel * dt;
-
-        let k2_v = body.accel * dt;
-        let k2_posit = (body.vel + k1_v * 0.5) * dt;
-
-        let k3_v = body.accel * dt;
-        let k3_posit = (body.vel + k2_v * 0.5) * dt;
-
-        let k4_v = body.accel * dt;
-        let k4_posit = (body.vel + k3_v) * dt;
-
-        // Step 2: Update position and velocity using weighted average of k-values
-        body.vel += (k1_v + k2_v * 2. + k3_v * 2. + k4_v) / 6.;
-        body.posit += (k1_posit + k2_posit * 2. + k3_posit * 2. + k4_posit) / 6.;
-    }
-}
+// todo: Put back once you have an accel computation.
+// fn integrate_rk4(bodies: &mut [Body], dt: f64) {
+//     for body in bodies.iter_mut() {
+//         // Step 1: Calculate the k-values for position and velocity
+//         let k1_v = body.accel * dt;
+//         let k1_posit = body.vel * dt;
+//
+//         let k2_v = compute_acceleration(body.posit + k1_posit * 0.5) * dt;
+//         let k2_posit = (body.vel + k1_v * 0.5) * dt;
+//
+//         let k3_v = compute_acceleration(body.posit + k2_posit * 0.5) * dt;
+//         let k3_posit = (body.vel + k2_v * 0.5) * dt;
+//
+//         let k4_v = compute_acceleration(body.posit + k3_posit) * dt;
+//         let k4_posit = (body.vel + k3_v) * dt;
+//
+//         // Step 2: Update position and velocity using weighted average of k-values
+//         body.vel += (k1_v + k2_v * 2. + k3_v * 2. + k4_v) / 6.;
+//         body.posit += (k1_posit + k2_posit * 2. + k3_posit * 2. + k4_posit) / 6.;
+//     }
+// }
 
 // todo: DRY
+// todo: Unless we want to apply accel etc to these rays, RK4 here is not required; accel
+// todo is always 0, and v is always c.
 fn integrate_rk4_ray(rays: &mut [GravRay], dt: f64) {
     // todo: Pending further exporation, no grav accel on rays.
     let a = Vec3::new_zero();
 
     for body in rays.iter_mut() {
         // Step 1: Calculate the k-values for position and velocity
-        let k1_v = a * dt;
+        let k1_v = a;
         let k1_posit = body.vel * dt;
 
-        let k2_v = a * dt;
+        let k2_v = a;
         let k2_posit = (body.vel + k1_v * 0.5) * dt;
 
-        let k3_v = a * dt;
+        let k3_v = a;
         let k3_posit = (body.vel + k2_v * 0.5) * dt;
 
-        let k4_v = a * dt;
+        let k4_v = a;
         let k4_posit = (body.vel + k3_v) * dt;
 
         // Step 2: Update position and velocity using weighted average of k-values
-        body.vel += (k1_v + k2_v * 2. + k3_v * 2. + k4_v) / 6.;
+        // body.vel += (k1_v + k2_v * 2. + k3_v * 2. + k4_v) / 6.;
+
+        // Vel is constant; C.
         body.posit += (k1_posit + k2_posit * 2. + k3_posit * 2. + k4_posit) / 6.;
     }
 }
-
-// fn run(n_elecs: usize, n_timesteps: usize, dt: f64) -> Vec<SnapShot> {
-//     let mut snapshots = Vec::new();
-//
-//     let charge_per_elec = Q_ELEC / n_elecs as f64;
-//
-//     let nuc = Nucleus {
-//         mass: 2_000., // todo temp?
-//         charge: -Q_ELEC,
-//         posit: Vec3::new_zero(),
-//     };
-//
-//     let mut elecs = make_initial_elecs(n_elecs);
-//
-//     for snap_i in 0..n_timesteps {
-//         let len = elecs.len();
-//         for elec_acted_on in 0..len {
-//             let mut a = Vec3::new_zero();
-//
-//             // Force of other elecs on this elec.
-//             for elec_actor in 0..len {
-//                 // continue; // todo removing elec-elec charge for now.
-//
-//                 // Split the slice to get mutable and immutable elements
-//                 // let (acted_on, actor) = elecs.split_at_mut(i);
-//
-//                 if elec_acted_on == elec_actor {
-//                     continue;
-//                 }
-//
-//                 a += accel_coulomb(
-//                     elecs[elec_acted_on].posit,
-//                     elecs[elec_actor].posit,
-//                     charge_per_elec,
-//                     charge_per_elec,
-//                     M_ELEC,
-//                     false,
-//                 );
-//             }
-//
-//             // Nuc force on this elec.
-//             a += accel_coulomb(
-//                 elecs[elec_acted_on].posit,
-//                 nuc.posit,
-//                 charge_per_elec,
-//                 -Q_ELEC,
-//                 M_ELEC,
-//                 true,
-//             );
-//             elecs[elec_acted_on].a = a;
-//         }
-//
-//         integrate_rk4(&mut elecs, dt);
-//
-//         snapshots.push(SnapShot {
-//             time: snap_i as f64 * dt,
-//             elec_posits: elecs.iter().map(|e| Vec3f32::new(e.posit.x as f32, e.posit.y as f32, e.posit.z as f32)).collect(),
-//             nuc_posits: vec![Vec3f32::new(nuc.posit.x as f32, nuc.posit.y as f32, nuc.posit.z as f32)]
-//         })
-//     }
-//
-//     snapshots
-// }
 
 /// A rectangular prism for sampling properties (generally an "infinitessimal" volume.
 struct SampleRect {
@@ -291,6 +272,16 @@ struct SampleRect {
 }
 
 impl SampleRect {
+    /// Create a rectangle of a given size, centered on a position
+    /// todo: Accept d-volume instead of width?
+    pub fn new(posit: Vec3, width: f64) -> Self {
+        let w_div2 = width / 2.;
+        Self {
+            start: Vec3::new(posit.x - w_div2, posit.y - w_div2, posit.z - w_div2),
+            end: Vec3::new(posit.x + w_div2, posit.y + w_div2, posit.z + w_div2),
+        }
+    }
+
     fn measure_properties(&self, rays: &[GravRay]) -> SampleProperties {
         let volume = {
             let dist_x = self.end.x - self.start.x;
@@ -316,7 +307,7 @@ impl SampleRect {
         // todo: To calculate div and curl, we need multiple sets of rays.
 
         SampleProperties {
-            charge_density: num_rays as f64 / volume,
+            ray_density: num_rays as f64 / volume,
             div: 0.,
             curl: 0.,
         }
@@ -330,11 +321,15 @@ struct GravRay {
     /// at any angle from the source.
     vel: Vec3,
     // todo: We can assume there is no acc on this, right?
+    /// We are currently applying a weight based on source mass; we could alternatively have more
+    /// massive objects output more rays. This method here is likely more computationally efficient.
+    src_mass: f64,
 }
 
 #[derive(Debug)]
 struct SampleProperties {
-    charge_density: f64,
+    /// Is this an analog for V (potential) ?
+    ray_density: f64,
     /// Divergence
     div: f64,
     curl: f64,
@@ -353,12 +348,14 @@ fn build(state: &mut State) {
         state.remove_far_rays();
 
         // Update ray propogation
-        integrate_rk4_ray(&mut state.rays, state.config.dt_integration)
+        integrate_rk4_ray(&mut state.rays, state.config.dt_integration);
 
         // Update body motion.
+        // integrate_rk4(&mut state.bodies, state.config.dt_integration);
 
         // Save the current state to a snapshot, for later playback.
         // Note: This can use a substantial amount of memory.
+        state.take_snapshot(t);
     }
 }
 
@@ -374,8 +371,9 @@ fn main() {
             mass: 1.,
         },
         Body {
-            posit: Vec3::new(1., 0., 0.),
-            vel: Vec3::new_zero(),
+            posit: Vec3::new(10., 0., 0.),
+            // vel: Vec3::new_zero(),
+            vel: Vec3::new(0.01, 0., 0.), // todo tmep
             accel: Vec3::new_zero(),
             mass: 1.,
         },
@@ -384,7 +382,6 @@ fn main() {
     build(&mut state);
 
     println!("Complete. Rendering...");
+
     render(state);
-    // let snapshots = run(200, 50_000, 0.001);
-    // let snapshots = run(1, 1000_000, 0.0001);
 }
