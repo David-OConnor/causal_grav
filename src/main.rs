@@ -1,4 +1,4 @@
-use std::f64::consts::TAU;
+use std::f64::{consts::TAU, MAX};
 
 use lin_alg::f64::Vec3;
 use rand::Rng;
@@ -21,6 +21,8 @@ const Q_ELEC: f64 = -1.;
 // If two particles are closer to each other than this, don't count accel, or cap it.
 const MIN_DIST: f64 = 0.1;
 
+const MAX_RAY_DIST: f64 = 100.; // todo: Adjust this approach A/R.
+
 // Don't calculate force if particles are farther than this from each other. Computation saver.
 // const MAX_DIST: f64 = 0.1;
 
@@ -28,6 +30,7 @@ pub struct Config {
     num_timesteps: usize,
     dt_integration: f64,
     dt_pulse: f64,
+    num_rays_per_iter: usize,
 }
 
 impl Default for Config {
@@ -36,6 +39,7 @@ impl Default for Config {
             num_timesteps: 1_000,
             dt_integration: 0.01,
             dt_pulse: 0.01,
+            num_rays_per_iter: 40,
         }
     }
 }
@@ -50,12 +54,57 @@ struct State {
     config: Config,
     ui: StateUi,
     bodies: Vec<Body>,
+    rays: Vec<GravRay>,
     snapshots: Vec<SnapShot>,
+}
+
+impl State {
+    /// Remove rays that are far from the area of interest, for performance reasons.
+    /// todo: This is crude; improve it to be more efficient.
+    fn remove_far_rays(&mut self) {
+        let mut removed_rays = Vec::new();
+
+        for (i, ray) in self.rays.iter().enumerate() {
+            if ray.posit.x > MAX_RAY_DIST
+                || ray.posit.y > MAX_RAY_DIST
+                || ray.posit.z > MAX_RAY_DIST
+            {
+                removed_rays.push(i);
+                continue;
+            }
+        }
+
+        for i in removed_rays {
+            self.rays.remove(i);
+        }
+    }
 }
 
 struct Body {
     posit: Vec3,
     vel: Vec3,
+    accel: Vec3,
+    mass: f64,
+}
+
+impl Body {
+    /// Generate a ray in a random direction.
+    pub fn create_ray(&self) -> GravRay {
+        let mut rng = rand::thread_rng();
+
+        let theta = rng.gen_range(0.0..TAU); // Random angle in [0, 𝜏)
+        let phi = rng.gen_range(0.0..TAU / 2.); // Random angle in [0, 𝜏/2]
+
+        let x = phi.sin() * theta.cos();
+        let y = phi.sin() * theta.sin();
+        let z = phi.cos();
+        let unit_vec = Vec3::new(x, y, z);
+
+        GravRay {
+            posit: self.posit,
+            vel: unit_vec * self.mass,
+        }
+    }
 }
 
 // // (radius, charge_in_radius)
@@ -126,26 +175,51 @@ fn accel(
     posit_diff_unit * f_mag / mass_acted_on
 }
 
-// fn integrate_rk4(bodies: &mut [Body], dt: f64) {
-//     for elec in elecs.iter_mut() {
-//         // Step 1: Calculate the k-values for position and velocity
-//         let k1_v = elec.a * dt;
-//         let k1_posit = elec.v * dt;
-//
-//         let k2_v = (elec.a) * dt;
-//         let k2_posit = (elec.v + k1_v * 0.5) * dt;
-//
-//         let k3_v = (elec.a) * dt;
-//         let k3_posit = (elec.v + k2_v * 0.5) * dt;
-//
-//         let k4_v = (elec.a) * dt;
-//         let k4_posit = (elec.v + k3_v) * dt;
-//
-//         // Step 2: Update position and velocity using weighted average of k-values
-//         elec.v += (k1_v + k2_v * 2. + k3_v * 2. + k4_v) / 6.;
-//         elec.posit += (k1_posit + k2_posit * 2. + k3_posit * 2. + k4_posit) / 6.;
-//     }
-// }
+fn integrate_rk4(bodies: &mut [Body], dt: f64) {
+    for body in bodies.iter_mut() {
+        // Step 1: Calculate the k-values for position and velocity
+        let k1_v = body.accel * dt;
+        let k1_posit = body.vel * dt;
+
+        let k2_v = body.accel * dt;
+        let k2_posit = (body.vel + k1_v * 0.5) * dt;
+
+        let k3_v = body.accel * dt;
+        let k3_posit = (body.vel + k2_v * 0.5) * dt;
+
+        let k4_v = body.accel * dt;
+        let k4_posit = (body.vel + k3_v) * dt;
+
+        // Step 2: Update position and velocity using weighted average of k-values
+        body.vel += (k1_v + k2_v * 2. + k3_v * 2. + k4_v) / 6.;
+        body.posit += (k1_posit + k2_posit * 2. + k3_posit * 2. + k4_posit) / 6.;
+    }
+}
+
+// todo: DRY
+fn integrate_rk4_ray(rays: &mut [GravRay], dt: f64) {
+    // todo: Pending further exporation, no grav accel on rays.
+    let a = Vec3::new_zero();
+
+    for body in rays.iter_mut() {
+        // Step 1: Calculate the k-values for position and velocity
+        let k1_v = a * dt;
+        let k1_posit = body.vel * dt;
+
+        let k2_v = a * dt;
+        let k2_posit = (body.vel + k1_v * 0.5) * dt;
+
+        let k3_v = a * dt;
+        let k3_posit = (body.vel + k2_v * 0.5) * dt;
+
+        let k4_v = a * dt;
+        let k4_posit = (body.vel + k3_v) * dt;
+
+        // Step 2: Update position and velocity using weighted average of k-values
+        body.vel += (k1_v + k2_v * 2. + k3_v * 2. + k4_v) / 6.;
+        body.posit += (k1_posit + k2_posit * 2. + k3_posit * 2. + k4_posit) / 6.;
+    }
+}
 
 // fn run(n_elecs: usize, n_timesteps: usize, dt: f64) -> Vec<SnapShot> {
 //     let mut snapshots = Vec::new();
@@ -228,12 +302,12 @@ impl SampleRect {
 
         let mut num_rays = 0;
         for ray in rays {
-            if ray.data.x >= self.start.x
-                && ray.data.x <= self.end.x
-                && ray.data.y >= self.start.y
-                && ray.data.y <= self.end.y
-                && ray.data.z >= self.start.z
-                && ray.data.z <= self.end.z
+            if ray.posit.x >= self.start.x
+                && ray.posit.x <= self.end.x
+                && ray.posit.y >= self.start.y
+                && ray.posit.y <= self.end.y
+                && ray.posit.z >= self.start.z
+                && ray.posit.z <= self.end.z
             {
                 num_rays += 1;
             }
@@ -251,9 +325,11 @@ impl SampleRect {
 
 /// Our model "particle" that travels outward from a source
 struct GravRay {
+    posit: Vec3,
     /// The magnitude corresponds to source mass. Direction is outward
     /// at any angle from the source.
-    data: Vec3,
+    vel: Vec3,
+    // todo: We can assume there is no acc on this, right?
 }
 
 #[derive(Debug)]
@@ -266,7 +342,24 @@ struct SampleProperties {
 
 /// Entry point for computation; rename A/R.
 fn build(state: &mut State) {
-    for t in 0..state.config.num_timesteps {}
+    for t in 0..state.config.num_timesteps {
+        // Create a new set of rays.
+        for body in &state.bodies {
+            for _ in 0..state.config.num_rays_per_iter {
+                state.rays.push(body.create_ray())
+            }
+        }
+
+        state.remove_far_rays();
+
+        // Update ray propogation
+        integrate_rk4_ray(&mut state.rays, state.config.dt_integration)
+
+        // Update body motion.
+
+        // Save the current state to a snapshot, for later playback.
+        // Note: This can use a substantial amount of memory.
+    }
 }
 
 fn main() {
@@ -277,10 +370,14 @@ fn main() {
         Body {
             posit: Vec3::new_zero(),
             vel: Vec3::new_zero(),
+            accel: Vec3::new_zero(),
+            mass: 1.,
         },
         Body {
             posit: Vec3::new(1., 0., 0.),
             vel: Vec3::new_zero(),
+            accel: Vec3::new_zero(),
+            mass: 1.,
         },
     ];
 
