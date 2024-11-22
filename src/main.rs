@@ -11,6 +11,10 @@ use crate::{playback::SnapShot, render::render};
 mod playback;
 mod render;
 mod ui;
+
+// Shower thought, from looking at this from a first person view: View things from the body's perspective.
+// Can you make of it something like that?
+
 // todo: What if you have total electric charge different from a whole number? Misc elec "particles"
 // todo zipping around in the either, to be capture.
 
@@ -29,7 +33,7 @@ const C: f64 = 10.;
 
 // todo: A/R
 // This cubed is d-volume
-const RAY_SAMPLE_WIDTH: f64 = 0.1;
+const RAY_SAMPLE_WIDTH: f64 = 1.;
 
 // We use this to calculate divergence of ray density, numerically.
 const DX_RAY_GRADIENT: f64 = RAY_SAMPLE_WIDTH;
@@ -50,7 +54,7 @@ impl Default for Config {
             num_timesteps: 2_000,
             dt_integration: 0.001,
             dt_pulse: 0.01,
-            num_rays_per_iter: 40,
+            num_rays_per_iter: 100,
         }
     }
 }
@@ -269,8 +273,10 @@ fn accel(body: &mut Body, rays: &[GravRay], emitter_id: usize) -> Vec3 {
     let rect = SampleRect::new(body.posit, RAY_SAMPLE_WIDTH);
     let properties= rect.measure_properties(rays, emitter_id);
 
+    println!("Prop: {:?}", properties);
+
     // todo: Divide by a rate constant.
-    let rate_const = 1.;
+    let rate_const = 520.;
 
     properties.net_direction * properties.ray_density / rate_const
 
@@ -387,11 +393,14 @@ impl SampleRect {
             }
         }
 
+        println!("\nVel sum: {:?}", vel_sum);
+        println!("Ray val: {ray_value}\n");
+
         // todo: To calculate div and curl, we need multiple sets of rays.
 
         SampleProperties {
             ray_density: ray_value / volume,
-            net_direction: vel_sum.to_normalized(),
+            net_direction: vel_sum.to_normalized() * -1.,
             div: 0.,
             curl: 0.,
         }
@@ -460,7 +469,7 @@ fn main() {
             V_acting_on: Vec3::new_zero(),
         },
         Body {
-            posit: Vec3::new(10., 0., 0.),
+            posit: Vec3::new(0.5, 0., 0.),
             // vel: Vec3::new_zero(),
             vel: Vec3::new(0.01, 0., 0.), // todo tmep
             accel: Vec3::new_zero(),
