@@ -31,6 +31,9 @@ const C: f64 = 10.;
 // This cubed is d-volume
 const RAY_SAMPLE_WIDTH: f64 = 0.1;
 
+// We use this to calculate divergence of ray density, numerically.
+const DX_RAY_GRADIENT: f64 = RAY_SAMPLE_WIDTH;
+
 // Don't calculate force if particles are farther than this from each other. Computation saver.
 // const MAX_DIST: f64 = 0.1;
 
@@ -64,6 +67,7 @@ struct State {
     bodies: Vec<Body>,
     rays: Vec<GravRay>,
     snapshots: Vec<SnapShot>,
+
 }
 
 impl State {
@@ -85,6 +89,11 @@ impl State {
                 .iter()
                 .map(|b| Vec3f32::new(b.posit.x as f32, b.posit.y as f32, b.posit.z as f32))
                 .collect(),
+            V_at_bodies: self
+                .bodies
+                .iter()
+                .map(|b| Vec3f32::new(b.V_acting_on.x as f32, b.V_acting_on.y as f32, b.V_acting_on.z as f32))
+                .collect(),
             rays: self
                 .rays
                 .iter()
@@ -99,24 +108,27 @@ struct Body {
     vel: Vec3,
     accel: Vec3,
     mass: f64,
+    /// We use this for debugging, testing etc. It goes in the snapshots.
+    V_acting_on: Vec3,
 }
 
 impl Body {
-    /// Generate a ray in a random direction.
-    pub fn create_ray(&self) -> GravRay {
+    /// Generate a ray traveling in a random direction.
+    pub fn create_ray(&self, emitter_id: usize) -> GravRay {
         let mut rng = rand::thread_rng();
 
-        // todo: This isn't random; it has a problem of creating poles of high density.
+        // todo: You could also generate a random quaternion.
 
         let theta = rng.gen_range(0.0..TAU); // Random angle in [0, 𝜏)
-        let phi = rng.gen_range(0.0..TAU / 2.); // Random angle in [0, 𝜏/2]
+        let cos_phi = rng.gen_range(-1.0..1.0); // Uniform in [-1, 1]
+        let sin_phi = (1.0_f64 - cos_phi * cos_phi).sqrt();
 
-        let x = phi.sin() * theta.cos();
-        let y = phi.sin() * theta.sin();
-        let z = phi.cos();
+        let x = sin_phi * theta.cos();
+        let y = sin_phi * theta.sin();
+        let z = cos_phi;
         let unit_vec = Vec3::new(x, y, z);
-
         GravRay {
+            emitter_id,
             posit: self.posit,
             vel: unit_vec * C,
             src_mass: self.mass,
@@ -192,18 +204,78 @@ impl Body {
 //     posit_diff_unit * f_mag / mass_acted_on
 // }
 
+/// We are treating the ray density gradient as a proxy for gravitational potential.
+/// Calculate it numberically.
+fn density_gradient(posit: Vec3, rays: &[GravRay], emitter_id: usize) -> Vec3 {
+    // let rect_this = SampleRect::new(posit, RAY_SAMPLE_WIDTH);
+
+    let rect_x_prev = SampleRect::new(
+        posit - Vec3::new(DX_RAY_GRADIENT, 0., 0.),
+        RAY_SAMPLE_WIDTH,
+    );
+    let rect_x_next = SampleRect::new(
+        posit + Vec3::new(DX_RAY_GRADIENT, 0., 0.),
+        RAY_SAMPLE_WIDTH,
+    );
+
+    let rect_y_prev = SampleRect::new(
+        posit - Vec3::new(0., DX_RAY_GRADIENT, 0.),
+        RAY_SAMPLE_WIDTH,
+    );
+    let rect_y_next = SampleRect::new(
+        posit + Vec3::new(0., DX_RAY_GRADIENT, 0.),
+        RAY_SAMPLE_WIDTH,
+    );
+
+    let rect_z_prev = SampleRect::new(
+        posit - Vec3::new(0., 0., DX_RAY_GRADIENT),
+        RAY_SAMPLE_WIDTH,
+    );
+    let rect_z_next = SampleRect::new(
+        posit + Vec3::new(0., 0., DX_RAY_GRADIENT),
+        RAY_SAMPLE_WIDTH,
+    );
+
+    // let properties_this = rect_this.measure_properties(rays);
+
+    let properties_x_prev = rect_x_prev.measure_properties(rays, emitter_id);
+    let properties_x_next = rect_x_next.measure_properties(rays, emitter_id);
+    let properties_y_prev = rect_y_prev.measure_properties(rays, emitter_id);
+    let properties_y_next = rect_y_next.measure_properties(rays, emitter_id);
+    let properties_z_prev = rect_z_prev.measure_properties(rays, emitter_id);
+    let properties_z_next = rect_z_next.measure_properties(rays, emitter_id);
+
+    println!("X PREF: {:?} Next: {:?}", properties_x_prev.ray_density, properties_x_next.ray_density);
+
+    Vec3::new(
+        (properties_x_next.ray_density - properties_x_prev.ray_density) / 2.,
+        (properties_y_next.ray_density - properties_y_prev.ray_density) / 2.,
+        (properties_z_next.ray_density - properties_z_prev.ray_density) / 2.,
+    )
+    //
+    // // todo: QC this etc
+    // // Potential
+    // let V_this = properties_this.ray_density;
+    //
+    // // todo: Is this the divergence property, or should we take the gradient using finite difference
+    // // todo from two sample rect locations?
+    // let gradient = Vec3::new_zero();
+}
+
 /// Calculate the force acting on a body, given the local environment of gravity rays around it.
-fn accel(body: &Body, rays: &[GravRay]) -> Vec3 {
+fn accel(body: &mut Body, rays: &[GravRay], emitter_id: usize) -> Vec3 {
+    // let ray_density_grad = density_gradient(body.posit, rays);
+
     let rect = SampleRect::new(body.posit, RAY_SAMPLE_WIDTH);
-    let properties = rect.measure_properties(rays);
+    let properties= rect.measure_properties(rays, emitter_id);
 
-    // todo: QC this etc
-    // Potential
-    let V = properties.ray_density;
+    // todo: Divide by a rate constant.
+    let rate_const = 1.;
 
-    // todo: Is this the divergence property, or should we take the gradient using finite difference
-    // todo from two sample rect locations?
-    let gradient = Vec3::new_zero();
+    properties.net_direction * properties.ray_density / rate_const
+
+    // todo: We need to take into account the destination body's mass, not just
+    // todo for inertia, but for attraction... right?
 
     // todo: We may be missing part of the puzzle.
     // let force = gradient * body.mass;
@@ -211,7 +283,9 @@ fn accel(body: &Body, rays: &[GravRay]) -> Vec3 {
     // a = F / m
     // force / body.mass
 
-    gradient / body.mass
+    // body.V_acting_on = ray_density_grad;
+
+    // ray_density_grad
 }
 
 // todo: Put back once you have an accel computation.
@@ -282,7 +356,7 @@ impl SampleRect {
         }
     }
 
-    fn measure_properties(&self, rays: &[GravRay]) -> SampleProperties {
+    fn measure_properties(&self, rays: &[GravRay], emitter_id: usize) -> SampleProperties {
         let volume = {
             let dist_x = self.end.x - self.start.x;
             let dist_y = self.end.y - self.start.y;
@@ -291,8 +365,15 @@ impl SampleRect {
             (dist_x.powi(2) + dist_y.powi(2) + dist_z.powi(2)).sqrt()
         };
 
-        let mut num_rays = 0;
+        let mut ray_value = 0.;
+        let mut vel_sum = Vec3::new_zero();
+
         for ray in rays {
+            // A method to avoid self-interaction.
+            if ray.emitter_id == emitter_id {
+                continue
+            }
+
             if ray.posit.x >= self.start.x
                 && ray.posit.x <= self.end.x
                 && ray.posit.y >= self.start.y
@@ -300,14 +381,17 @@ impl SampleRect {
                 && ray.posit.z >= self.start.z
                 && ray.posit.z <= self.end.z
             {
-                num_rays += 1;
+                ray_value += ray.src_mass;
+
+                vel_sum += ray.vel;
             }
         }
 
         // todo: To calculate div and curl, we need multiple sets of rays.
 
         SampleProperties {
-            ray_density: num_rays as f64 / volume,
+            ray_density: ray_value / volume,
+            net_direction: vel_sum.to_normalized(),
             div: 0.,
             curl: 0.,
         }
@@ -316,6 +400,8 @@ impl SampleRect {
 
 /// Our model "particle" that travels outward from a source
 struct GravRay {
+    /// A quick and dirty way to prevent a body from interacting with itself.
+    emitter_id: usize,
     posit: Vec3,
     /// The magnitude corresponds to source mass. Direction is outward
     /// at any angle from the source.
@@ -330,6 +416,8 @@ struct GravRay {
 struct SampleProperties {
     /// Is this an analog for V (potential) ?
     ray_density: f64,
+    /// A unit vec, from the weighted average of ray velocities.
+    net_direction: Vec3,
     /// Divergence
     div: f64,
     curl: f64,
@@ -339,9 +427,9 @@ struct SampleProperties {
 fn build(state: &mut State) {
     for t in 0..state.config.num_timesteps {
         // Create a new set of rays.
-        for body in &state.bodies {
+        for (id, body) in state.bodies.iter().enumerate() {
             for _ in 0..state.config.num_rays_per_iter {
-                state.rays.push(body.create_ray())
+                state.rays.push(body.create_ray(id))
             }
         }
 
@@ -369,6 +457,7 @@ fn main() {
             vel: Vec3::new_zero(),
             accel: Vec3::new_zero(),
             mass: 1.,
+            V_acting_on: Vec3::new_zero(),
         },
         Body {
             posit: Vec3::new(10., 0., 0.),
@@ -376,12 +465,22 @@ fn main() {
             vel: Vec3::new(0.01, 0., 0.), // todo tmep
             accel: Vec3::new_zero(),
             mass: 1.,
+            V_acting_on: Vec3::new_zero(),
         },
     ];
 
     build(&mut state);
 
-    println!("Complete. Rendering...");
+    // todo: Temp. Testing our approach
+    let acc = accel(&mut state.bodies[1], &state.rays, 1);
+
+
+    // todo: We must discount etc the body's own rays. ANd possibly consider their
+    // todo significance.
+
+    println!("Acc: {:?}", acc);
+
+    println!("Complete. Rendering.");
 
     render(state);
 }

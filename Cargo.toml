@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-graphics = { path = "../../graphics_wgpu" }
+graphics = { path = "../../graphics" }
 lin-alg = { package = "lin-alg2", version = "^1.0" }
 #lin-alg = { package = "lin-alg2", path = "../../lin_alg" }
 egui = "^0.29.1"

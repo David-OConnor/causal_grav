@@ -10,7 +10,7 @@ pub const ROW_SPACING: f32 = 22.;
 pub const COL_SPACING: f32 = 30.;
 
 /// This function draws the (immediate-mode) GUI.
-/// [UI items](https://docs.rs/egui/latest/egui/struct.Ui.html#method.heading)
+/// [UI items](https://docs.rs/egui/latest/egui/struct.Ui.html)
 pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> EngineUpdates {
     let mut engine_updates = EngineUpdates::default();
 
@@ -38,6 +38,13 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
         });
 
         ui.add_space(ROW_SPACING / 2.);
+
+        ui.horizontal(|ui| {
+           for (i, body_V) in  state.snapshots[state.ui.snapshot_selected].V_at_bodies.iter().enumerate() {
+               ui.label(&format!("V at Body {i}:"));
+               ui.label(&format!("{:?}", body_V));
+           }
+        });
     });
 
     engine_updates

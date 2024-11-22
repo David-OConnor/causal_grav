@@ -12,6 +12,7 @@ pub struct SnapShot {
     // To save memory, we store the snapshots as f32; we only need f64 precision
     // during the integration.
     pub body_posits: Vec<Vec3f32>,
+    pub V_at_bodies: Vec<Vec3f32>,
     // todo: Determine if you want to store and show these.
     // todo: Store a posit and a velocity for rays A/R.
     pub rays: Vec<Vec3f32>,
