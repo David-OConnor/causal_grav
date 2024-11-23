@@ -24,16 +24,16 @@ mod ui;
 const M_ELEC: f64 = 1.;
 const Q_ELEC: f64 = -1.;
 
-// If two particles are closer to each other than this, don't count accel, or cap it.
-const MIN_DIST: f64 = 0.1;
-
 const MAX_RAY_DIST: f64 = 30.; // todo: Adjust this approach A/R.
+const MAX_SHELL_R: f64 = 300.; // todo: Adjust this approach A/R.
+
+const SNAPSHOT_RATIO: usize = 10;
 
 const C: f64 = 10.;
 
 // todo: A/R
 // This cubed is d-volume
-const RAY_SAMPLE_WIDTH: f64 = 1.;
+const RAY_SAMPLE_WIDTH: f64 = 0.8;
 
 // We use this to calculate divergence of ray density, numerically.
 const DX_RAY_GRADIENT: f64 = RAY_SAMPLE_WIDTH;
@@ -44,7 +44,7 @@ const DX_RAY_GRADIENT: f64 = RAY_SAMPLE_WIDTH;
 pub struct Config {
     num_timesteps: usize,
     dt_integration: f64,
-    dt_pulse: f64,
+    // dt_pulse: f64,
     num_rays_per_iter: usize,
 }
 
@@ -53,8 +53,8 @@ impl Default for Config {
         Self {
             num_timesteps: 2_000,
             dt_integration: 0.001,
-            dt_pulse: 0.01,
-            num_rays_per_iter: 100,
+            // dt_pulse: 0.01,
+            num_rays_per_iter: 200,
         }
     }
 }
@@ -70,8 +70,8 @@ struct State {
     ui: StateUi,
     bodies: Vec<Body>,
     rays: Vec<GravRay>,
+    shells: Vec<GravShell>,
     snapshots: Vec<SnapShot>,
-
 }
 
 impl State {
@@ -83,6 +83,8 @@ impl State {
                 && ray.posit.y <= MAX_RAY_DIST
                 && ray.posit.z <= MAX_RAY_DIST
         });
+
+        self.shells.retain(|shell| shell.radius <= MAX_SHELL_R);
     }
 
     fn take_snapshot(&mut self, time: usize) {
@@ -96,12 +98,23 @@ impl State {
             V_at_bodies: self
                 .bodies
                 .iter()
-                .map(|b| Vec3f32::new(b.V_acting_on.x as f32, b.V_acting_on.y as f32, b.V_acting_on.z as f32))
+                .map(|b| {
+                    Vec3f32::new(
+                        b.V_acting_on.x as f32,
+                        b.V_acting_on.y as f32,
+                        b.V_acting_on.z as f32,
+                    )
+                })
                 .collect(),
             rays: self
                 .rays
                 .iter()
-                .map(|r| Vec3f32::new(r.posit.x as f32, r.posit.y as f32, r.posit.z as f32))
+                .map(|r| {
+                    (
+                        Vec3f32::new(r.posit.x as f32, r.posit.y as f32, r.posit.z as f32),
+                        r.emitter_id,
+                    )
+                })
                 .collect(),
         })
     }
@@ -135,6 +148,16 @@ impl Body {
             emitter_id,
             posit: self.posit,
             vel: unit_vec * C,
+            src_mass: self.mass,
+        }
+    }
+
+    /// Generate a shell traveling outward.
+    pub fn create_shell(&self, emitter_id: usize) -> GravShell {
+        GravShell {
+            emitter_id,
+            center: self.posit,
+            radius: 0.,
             src_mass: self.mass,
         }
     }
@@ -175,81 +198,33 @@ impl Body {
 //     result
 // }
 
-// /// Calculate the Coulomb or gravitational acceleration on a particle, from a single other particle.
-// fn accel(
-//     posit_acted_on: Vec3,
-//     posit_actor: Vec3,
-//     q_acted_on: f64,
-//     q_actor: f64,
-//     mass_acted_on: f64,
-//     nuc_actor: bool,
-// ) -> Vec3 {
-//     let posit_diff = posit_acted_on - posit_actor;
-//     let dist = posit_diff.magnitude();
-//
-//     let posit_diff_unit = posit_diff / dist;
-//
-//     // Note: We factor out KC * Q_PROT, since they are present in every calculation.
-//     // Calculate the Coulomb force between nuclei.
-//
-//     let f_mag = q_acted_on * q_actor / dist.powi(2);
-//
-//     // todo: Solving the nuc-toss-out problem.
-//     if nuc_actor && dist < 0.1 {
-//         // println!("Min dist: {:?} Force: {:?}", dist, f_mag);
-//         return Vec3::new_zero();
-//     }
-//
-//     if dist < MIN_DIST {
-//         println!("Min dist: {:?} Force: {:?}", dist, f_mag);
-//         return Vec3::new_zero();
-//     }
-//
-//     posit_diff_unit * f_mag / mass_acted_on
-// }
-
 /// We are treating the ray density gradient as a proxy for gravitational potential.
 /// Calculate it numberically.
-fn density_gradient(posit: Vec3, rays: &[GravRay], emitter_id: usize) -> Vec3 {
+fn density_gradient(
+    posit: Vec3,
+    rays: &[GravRay],
+    shells: &[GravShell],
+    emitter_id: usize,
+) -> Vec3 {
     // let rect_this = SampleRect::new(posit, RAY_SAMPLE_WIDTH);
 
-    let rect_x_prev = SampleRect::new(
-        posit - Vec3::new(DX_RAY_GRADIENT, 0., 0.),
-        RAY_SAMPLE_WIDTH,
-    );
-    let rect_x_next = SampleRect::new(
-        posit + Vec3::new(DX_RAY_GRADIENT, 0., 0.),
-        RAY_SAMPLE_WIDTH,
-    );
+    let rect_x_prev = SampleRect::new(posit - Vec3::new(DX_RAY_GRADIENT, 0., 0.), RAY_SAMPLE_WIDTH);
+    let rect_x_next = SampleRect::new(posit + Vec3::new(DX_RAY_GRADIENT, 0., 0.), RAY_SAMPLE_WIDTH);
 
-    let rect_y_prev = SampleRect::new(
-        posit - Vec3::new(0., DX_RAY_GRADIENT, 0.),
-        RAY_SAMPLE_WIDTH,
-    );
-    let rect_y_next = SampleRect::new(
-        posit + Vec3::new(0., DX_RAY_GRADIENT, 0.),
-        RAY_SAMPLE_WIDTH,
-    );
+    let rect_y_prev = SampleRect::new(posit - Vec3::new(0., DX_RAY_GRADIENT, 0.), RAY_SAMPLE_WIDTH);
+    let rect_y_next = SampleRect::new(posit + Vec3::new(0., DX_RAY_GRADIENT, 0.), RAY_SAMPLE_WIDTH);
 
-    let rect_z_prev = SampleRect::new(
-        posit - Vec3::new(0., 0., DX_RAY_GRADIENT),
-        RAY_SAMPLE_WIDTH,
-    );
-    let rect_z_next = SampleRect::new(
-        posit + Vec3::new(0., 0., DX_RAY_GRADIENT),
-        RAY_SAMPLE_WIDTH,
-    );
+    let rect_z_prev = SampleRect::new(posit - Vec3::new(0., 0., DX_RAY_GRADIENT), RAY_SAMPLE_WIDTH);
+    let rect_z_next = SampleRect::new(posit + Vec3::new(0., 0., DX_RAY_GRADIENT), RAY_SAMPLE_WIDTH);
 
     // let properties_this = rect_this.measure_properties(rays);
 
-    let properties_x_prev = rect_x_prev.measure_properties(rays, emitter_id);
-    let properties_x_next = rect_x_next.measure_properties(rays, emitter_id);
-    let properties_y_prev = rect_y_prev.measure_properties(rays, emitter_id);
-    let properties_y_next = rect_y_next.measure_properties(rays, emitter_id);
-    let properties_z_prev = rect_z_prev.measure_properties(rays, emitter_id);
-    let properties_z_next = rect_z_next.measure_properties(rays, emitter_id);
-
-    println!("X PREF: {:?} Next: {:?}", properties_x_prev.ray_density, properties_x_next.ray_density);
+    let properties_x_prev = rect_x_prev.measure_properties(rays, shells, emitter_id);
+    let properties_x_next = rect_x_next.measure_properties(rays, shells, emitter_id);
+    let properties_y_prev = rect_y_prev.measure_properties(rays, shells, emitter_id);
+    let properties_y_next = rect_y_next.measure_properties(rays, shells, emitter_id);
+    let properties_z_prev = rect_z_prev.measure_properties(rays, shells, emitter_id);
+    let properties_z_next = rect_z_next.measure_properties(rays, shells, emitter_id);
 
     Vec3::new(
         (properties_x_next.ray_density - properties_x_prev.ray_density) / 2.,
@@ -267,18 +242,27 @@ fn density_gradient(posit: Vec3, rays: &[GravRay], emitter_id: usize) -> Vec3 {
 }
 
 /// Calculate the force acting on a body, given the local environment of gravity rays around it.
-fn accel(body: &mut Body, rays: &[GravRay], emitter_id: usize) -> Vec3 {
+fn accel(
+    body: &mut Body,
+    rays: &[GravRay],
+    shells: &[GravShell],
+    emitter_id: usize,
+    dt: f64,
+) -> Vec3 {
     // let ray_density_grad = density_gradient(body.posit, rays);
 
     let rect = SampleRect::new(body.posit, RAY_SAMPLE_WIDTH);
-    let properties= rect.measure_properties(rays, emitter_id);
+    let properties = rect.measure_properties(rays, shells, emitter_id);
 
-    println!("Prop: {:?}", properties);
+    // println!("Prop: {:?}", properties);
 
+    // todo: The rate constant must take into account the angle of the rays; dividing by dt
+    // todo is likely only to work in the limit of infinitely small d_theta for ray emission, etc.
     // todo: Divide by a rate constant.
-    let rate_const = 520.;
+    let rate_const = 460.;
+    // let rate_const = 1. / dt; // todo: we can pre-calc this, but not a big deal.
 
-    properties.net_direction * properties.ray_density / rate_const
+    properties.net_direction * properties.ray_density * rate_const
 
     // todo: We need to take into account the destination body's mass, not just
     // todo for inertia, but for attraction... right?
@@ -292,6 +276,22 @@ fn accel(body: &mut Body, rays: &[GravRay], emitter_id: usize) -> Vec3 {
     // body.V_acting_on = ray_density_grad;
 
     // ray_density_grad
+}
+
+/// Calculate the force acting on a body, given the local environment of gravity shells intersecting it.
+fn accel_shells(
+    body: &mut Body,
+    rays: &[GravRay],
+    shells: &[GravShell],
+    emitter_id: usize,
+    dt: f64,
+) -> Vec3 {
+    let rect = SampleRect::new(body.posit, RAY_SAMPLE_WIDTH);
+    let properties = rect.measure_properties(rays, shells, emitter_id);
+
+    // println!("Prop: {:?}", properties);
+
+    properties.acc_shell
 }
 
 // todo: Put back once you have an accel computation.
@@ -362,7 +362,12 @@ impl SampleRect {
         }
     }
 
-    fn measure_properties(&self, rays: &[GravRay], emitter_id: usize) -> SampleProperties {
+    fn measure_properties(
+        &self,
+        rays: &[GravRay],
+        shells: &[GravShell],
+        emitter_id: usize,
+    ) -> SampleProperties {
         let volume = {
             let dist_x = self.end.x - self.start.x;
             let dist_y = self.end.y - self.start.y;
@@ -377,7 +382,7 @@ impl SampleRect {
         for ray in rays {
             // A method to avoid self-interaction.
             if ray.emitter_id == emitter_id {
-                continue
+                continue;
             }
 
             if ray.posit.x >= self.start.x
@@ -393,20 +398,34 @@ impl SampleRect {
             }
         }
 
-        println!("\nVel sum: {:?}", vel_sum);
-        println!("Ray val: {ray_value}\n");
+        // println!("\nVel sum: {:?}", vel_sum);
+        // println!("Ray val: {ray_value}\n");
 
+        let mut acc_shell = Vec3::new_zero();
+        let center = Vec3::new(
+            (self.end.x - self.start.x) / 2.,
+            (self.end.y - self.start.y) / 2.,
+            (self.end.z - self.start.z) / 2.,
+        );
+
+        for shell in shells {
+            if shell.intersects_rect(self) {
+                acc_shell + (shell.center - center) * shell.src_mass / shell.radius.powi(2);
+            }
+        }
         // todo: To calculate div and curl, we need multiple sets of rays.
 
         SampleProperties {
             ray_density: ray_value / volume,
             net_direction: vel_sum.to_normalized() * -1.,
+            acc_shell,
             div: 0.,
             curl: 0.,
         }
     }
 }
 
+#[derive(Debug)]
 /// Our model "particle" that travels outward from a source
 struct GravRay {
     /// A quick and dirty way to prevent a body from interacting with itself.
@@ -422,9 +441,36 @@ struct GravRay {
 }
 
 #[derive(Debug)]
+struct GravShell {
+    emitter_id: usize,
+    center: Vec3,
+    radius: f64,
+    src_mass: f64,
+}
+
+impl GravShell {
+    /// Determine if a shell intersects a box.
+    pub fn intersects_rect(&self, rect: &SampleRect) -> bool {
+        // Calculate the clamped point on the box closest to the sphere's center.
+        let clamped_x = self.center.x.clamp(rect.start.x, rect.end.x);
+        let clamped_y = self.center.y.clamp(rect.start.y, rect.end.y);
+        let clamped_z = self.center.z.clamp(rect.start.z, rect.end.z);
+
+        // Compute the squared distance from the sphere's center to the clamped point.
+        let distance_squared = (self.center.x - clamped_x).powi(2)
+            + (self.center.y - clamped_y).powi(2)
+            + (self.center.z - clamped_z).powi(2);
+
+        // The shell intersects the box if the squared distance is less than or equal to the squared radius.
+        distance_squared <= self.radius.powi(2)
+    }
+}
+
+#[derive(Debug)]
 struct SampleProperties {
     /// Is this an analog for V (potential) ?
     ray_density: f64,
+    acc_shell: Vec3,
     /// A unit vec, from the weighted average of ray velocities.
     net_direction: Vec3,
     /// Divergence
@@ -434,11 +480,17 @@ struct SampleProperties {
 
 /// Entry point for computation; rename A/R.
 fn build(state: &mut State) {
+    // todo temp
+    let mut acc = Vec3::new_zero();
+    let mut acc_shell = Vec3::new_zero();
+    let mut counter = 0;
+
     for t in 0..state.config.num_timesteps {
         // Create a new set of rays.
         for (id, body) in state.bodies.iter().enumerate() {
             for _ in 0..state.config.num_rays_per_iter {
-                state.rays.push(body.create_ray(id))
+                state.rays.push(body.create_ray(id));
+                state.shells.push(body.create_shell(id));
             }
         }
 
@@ -447,13 +499,46 @@ fn build(state: &mut State) {
         // Update ray propogation
         integrate_rk4_ray(&mut state.rays, state.config.dt_integration);
 
+        for shell in &mut state.shells {
+            shell.radius += C * state.config.dt_integration;
+        }
+
         // Update body motion.
         // integrate_rk4(&mut state.bodies, state.config.dt_integration);
 
         // Save the current state to a snapshot, for later playback.
         // Note: This can use a substantial amount of memory.
-        state.take_snapshot(t);
+
+        if t % SNAPSHOT_RATIO == 0 {
+            state.take_snapshot(t / SNAPSHOT_RATIO);
+        }
+
+        // todo temp
+        if t + 30 >= state.config.num_timesteps {
+            counter += 1;
+            acc += accel(
+                &mut state.bodies[1],
+                &state.rays,
+                &state.shells,
+                1,
+                state.config.dt_integration,
+            );
+            acc_shell += accel_shells(
+                &mut state.bodies[1],
+                &state.rays,
+                &state.shells,
+                1,
+                state.config.dt_integration,
+            );
+        }
     }
+
+    println!("SHELLS: {:?}", state.shells.len());
+
+    // todo temp
+    acc = acc / counter as f64;
+    acc_shell = acc_shell / counter as f64;
+    println!("Acc net: {:?}. Shell: {:?}", acc, acc_shell);
 }
 
 fn main() {
@@ -469,7 +554,7 @@ fn main() {
             V_acting_on: Vec3::new_zero(),
         },
         Body {
-            posit: Vec3::new(0.5, 0., 0.),
+            posit: Vec3::new(3., 0., 0.),
             // vel: Vec3::new_zero(),
             vel: Vec3::new(0.01, 0., 0.), // todo tmep
             accel: Vec3::new_zero(),
@@ -481,13 +566,12 @@ fn main() {
     build(&mut state);
 
     // todo: Temp. Testing our approach
-    let acc = accel(&mut state.bodies[1], &state.rays, 1);
-
+    // let acc = accel(&mut state.bodies[1], &state.rays, 1);
 
     // todo: We must discount etc the body's own rays. ANd possibly consider their
     // todo significance.
 
-    println!("Acc: {:?}", acc);
+    // println!("Acc: {:?}", acc);
 
     println!("Complete. Rendering.");
 

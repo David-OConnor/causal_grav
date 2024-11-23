@@ -321,7 +321,7 @@ version = "0.1.0"
 dependencies = [
  "egui",
  "graphics",
- "lin-alg2",
+ "lin_alg",
  "rand",
 ]
 
@@ -910,7 +910,7 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "image",
- "lin-alg2",
+ "lin_alg",
  "obj",
  "pollster",
  "wgpu",
@@ -1300,10 +1300,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "lin-alg2"
+name = "lin_alg"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62b015dd3d6f83266fc73c715fdb5aa952ac8ace7825537f7201f5a2e3926857"
+checksum = "dfc015020c6f37753aac9db236feefdb30e27fbe1a935dc29b7309a3d03611a6"
 
 [[package]]
 name = "linux-raw-sys"

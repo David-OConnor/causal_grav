@@ -23,9 +23,15 @@ pub const BODY_SIZE: f32 = 0.2;
 pub const BODY_SHINYNESS: f32 = 2.;
 pub const BODY_COLOR: Color = (1.0, 0.2, 0.2);
 
-pub const RAY_SIZE: f32 = 0.01;
+pub const RAY_SIZE: f32 = 0.005;
 pub const RAY_SHINYNESS: f32 = 2.;
-pub const RAY_COLOR: Color = (1., 1.0, 0.2);
+pub const RAY_COLORS: [Color; 5] = [
+    (1., 1.0, 0.2),
+    (0.5, 0.7, 1.),
+    (0., 0., 0.9),
+    (0.9, 0.3, 0.2),
+    (1., 0.0, 1.0),
+];
 
 fn event_handler(
     _state: &mut State,

@@ -40,10 +40,14 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
         ui.add_space(ROW_SPACING / 2.);
 
         ui.horizontal(|ui| {
-           for (i, body_V) in  state.snapshots[state.ui.snapshot_selected].V_at_bodies.iter().enumerate() {
-               ui.label(&format!("V at Body {i}:"));
-               ui.label(&format!("{:?}", body_V));
-           }
+            for (i, body_V) in state.snapshots[state.ui.snapshot_selected]
+                .V_at_bodies
+                .iter()
+                .enumerate()
+            {
+                ui.label(&format!("V at Body {i}:"));
+                ui.label(&format!("{:?}", body_V));
+            }
         });
     });
 

@@ -4,7 +4,7 @@
 use graphics::Entity;
 use lin_alg::f32::{Quaternion, Vec3 as Vec3f32};
 
-use crate::render::{BODY_COLOR, BODY_SHINYNESS, BODY_SIZE, RAY_COLOR, RAY_SHINYNESS, RAY_SIZE};
+use crate::render::{BODY_COLOR, BODY_SHINYNESS, BODY_SIZE, RAY_COLORS, RAY_SHINYNESS, RAY_SIZE};
 
 #[derive(Debug)]
 pub struct SnapShot {
@@ -15,7 +15,8 @@ pub struct SnapShot {
     pub V_at_bodies: Vec<Vec3f32>,
     // todo: Determine if you want to store and show these.
     // todo: Store a posit and a velocity for rays A/R.
-    pub rays: Vec<Vec3f32>,
+    // The usize is body id.
+    pub rays: Vec<(Vec3f32, usize)>,
 }
 
 pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot) {
@@ -32,13 +33,13 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot) {
         ));
     }
 
-    for ray_posit in &snapshot.rays {
+    for (ray_posit, body_id) in &snapshot.rays {
         entities.push(Entity::new(
             0,
             *ray_posit,
             Quaternion::new_identity(),
             RAY_SIZE,
-            RAY_COLOR,
+            RAY_COLORS[body_id % RAY_COLORS.len()],
             RAY_SHINYNESS,
         ));
     }
