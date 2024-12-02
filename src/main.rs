@@ -5,13 +5,13 @@ use std::f64::consts::TAU;
 use lin_alg::{f32::Vec3 as Vec3f32, f64::Vec3};
 use rand::Rng;
 
-use crate::{playback::SnapShot, render::render};
+use crate::{gaussian::GaussianShell, playback::SnapShot, render::render};
 // Add this to use the random number generator
 
+mod gaussian;
 mod playback;
 mod render;
 mod ui;
-
 // Shower thought, from looking at this from a first person view: View things from the body's perspective.
 // Can you make of it something like that?
 
@@ -51,9 +51,10 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            num_timesteps: 2_000,
-            dt_integration: 0.001,
-            // dt_pulse: 0.01,
+            // num_timesteps: 2_000,
+            num_timesteps: 20_000,
+            // dt_integration: 0.001,
+            dt_integration: 0.0001,
             num_rays_per_iter: 200,
         }
     }
@@ -262,7 +263,7 @@ fn accel(
     let rate_const = 460.;
     // let rate_const = 1. / dt; // todo: we can pre-calc this, but not a big deal.
 
-    properties.net_direction * properties.ray_density * rate_const
+    properties.ray_net_direction * properties.ray_density * rate_const
 
     // todo: We need to take into account the destination body's mass, not just
     // todo for inertia, but for attraction... right?
@@ -377,7 +378,7 @@ impl SampleRect {
         };
 
         let mut ray_value = 0.;
-        let mut vel_sum = Vec3::new_zero();
+        let mut ray_vel_sum = Vec3::new_zero();
 
         for ray in rays {
             // A method to avoid self-interaction.
@@ -393,32 +394,54 @@ impl SampleRect {
                 && ray.posit.z <= self.end.z
             {
                 ray_value += ray.src_mass;
-
-                vel_sum += ray.vel;
+                ray_vel_sum += ray.vel;
             }
         }
 
         // println!("\nVel sum: {:?}", vel_sum);
         // println!("Ray val: {ray_value}\n");
 
-        let mut acc_shell = Vec3::new_zero();
-        let center = Vec3::new(
-            (self.end.x - self.start.x) / 2.,
-            (self.end.y - self.start.y) / 2.,
-            (self.end.z - self.start.z) / 2.,
+        let sample_center = Vec3::new(
+            (self.end.x + self.start.x) / 2.,
+            (self.end.y + self.start.y) / 2.,
+            (self.end.z + self.start.z) / 2.,
         );
 
+        // let mut shell_inner = None;
+        // let mut shell_outer = None;
+
+        let mut shell_value = 0.;
+        let mut shell_vel_sum = Vec3::new_zero();
+
+        // todo: Once you have more than one body acting on a target, you need to change this, so you get
+        // todo exactly 0 or 1 shells per other body.
         for shell in shells {
-            if shell.intersects_rect(self) {
-                acc_shell + (shell.center - center) * shell.src_mass / shell.radius.powi(2);
+            if shell.emitter_id == emitter_id {
+                continue;
             }
+
+            let gauss = GaussianShell {
+                center: shell.center,
+                radius: shell.radius,
+                a: 1.,
+                c: 1., // todo: Exper with a and c.
+            };
+            shell_value += shell.src_mass * gauss.value(sample_center);
+            // todo: QC what the acc dir from the shell is.
+            let shell_acc_dir = (sample_center - shell.center).to_normalized();
+            shell_vel_sum += shell_acc_dir * shell_value; // todo: QC order
+
+            // if shell.intersects_rect(self) {
+            //     println!("Intersects: {:?}", shell);
+            //     acc_shell + (shell.center - center) * shell.src_mass / shell.radius.powi(2);
+            // }
         }
         // todo: To calculate div and curl, we need multiple sets of rays.
 
         SampleProperties {
             ray_density: ray_value / volume,
-            net_direction: vel_sum.to_normalized() * -1.,
-            acc_shell,
+            ray_net_direction: ray_vel_sum.to_normalized() * -1.,
+            acc_shell: shell_vel_sum,
             div: 0.,
             curl: 0.,
         }
@@ -449,20 +472,34 @@ struct GravShell {
 }
 
 impl GravShell {
-    /// Determine if a shell intersects a box.
+    /// Determine if the shell surface intersects a rectangular box.
     pub fn intersects_rect(&self, rect: &SampleRect) -> bool {
-        // Calculate the clamped point on the box closest to the sphere's center.
-        let clamped_x = self.center.x.clamp(rect.start.x, rect.end.x);
-        let clamped_y = self.center.y.clamp(rect.start.y, rect.end.y);
-        let clamped_z = self.center.z.clamp(rect.start.z, rect.end.z);
+        // Iterate over all the vertices of the rectangular prism.
+        let box_vertices = [
+            Vec3::new(rect.start.x, rect.start.y, rect.start.z),
+            Vec3::new(rect.start.x, rect.start.y, rect.end.z),
+            Vec3::new(rect.start.x, rect.end.y, rect.start.z),
+            Vec3::new(rect.start.x, rect.end.y, rect.end.z),
+            Vec3::new(rect.end.x, rect.start.y, rect.start.z),
+            Vec3::new(rect.end.x, rect.start.y, rect.end.z),
+            Vec3::new(rect.end.x, rect.end.y, rect.start.z),
+            Vec3::new(rect.end.x, rect.end.y, rect.end.z),
+        ];
 
-        // Compute the squared distance from the sphere's center to the clamped point.
-        let distance_squared = (self.center.x - clamped_x).powi(2)
-            + (self.center.y - clamped_y).powi(2)
-            + (self.center.z - clamped_z).powi(2);
+        for vertex in &box_vertices {
+            let distance = (self.center.x - vertex.x).powi(2)
+                + (self.center.y - vertex.y).powi(2)
+                + (self.center.z - vertex.z).powi(2);
 
-        // The shell intersects the box if the squared distance is less than or equal to the squared radius.
-        distance_squared <= self.radius.powi(2)
+            let radius_squared = self.radius.powi(2);
+
+            // Check if the distance to the vertex is exactly the radius.
+            if (distance - radius_squared).abs() < f64::EPSILON {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
@@ -470,9 +507,9 @@ impl GravShell {
 struct SampleProperties {
     /// Is this an analog for V (potential) ?
     ray_density: f64,
-    acc_shell: Vec3,
     /// A unit vec, from the weighted average of ray velocities.
-    net_direction: Vec3,
+    ray_net_direction: Vec3,
+    acc_shell: Vec3,
     /// Divergence
     div: f64,
     curl: f64,
@@ -488,10 +525,11 @@ fn build(state: &mut State) {
     for t in 0..state.config.num_timesteps {
         // Create a new set of rays.
         for (id, body) in state.bodies.iter().enumerate() {
+            // todo temp RM
             for _ in 0..state.config.num_rays_per_iter {
-                state.rays.push(body.create_ray(id));
-                state.shells.push(body.create_shell(id));
+                // state.rays.push(body.create_ray(id));
             }
+            state.shells.push(body.create_shell(id));
         }
 
         state.remove_far_rays();

@@ -43,4 +43,16 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot) {
             RAY_SHINYNESS,
         ));
     }
+
+    // todo: Draw an actual shell instead of a sphere.
+    // for (shell_posit, shell_radius, body_id) in &snapshot.shells {
+    //     entities.push(Entity::new(
+    //         0,
+    //         *shell_posit,
+    //         Quaternion::new_identity(),
+    //         shell_radius,
+    //         RAY_COLORS[body_id % RAY_COLORS.len()],
+    //         RAY_SHINYNESS,
+    //     ));
+    // }
 }
