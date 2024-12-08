@@ -60,6 +60,17 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 ui.label(&format!("{:?}", body_V));
             }
         });
+
+        ui.horizontal(|ui| {
+            for (i, body_p) in state.snapshots[state.ui.snapshot_selected]
+                .body_posits
+                .iter()
+                .enumerate()
+            {
+                ui.label(&format!("Posit Body {i}:"));
+                ui.label(&format!("{:?}", body_p));
+            }
+        })
     });
 
     engine_updates

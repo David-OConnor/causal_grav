@@ -14,6 +14,7 @@ use crate::{
 
 mod accel;
 mod gaussian;
+mod integrate;
 mod playback;
 mod render;
 mod ui;
@@ -32,7 +33,7 @@ const Q_ELEC: f64 = -1.;
 const MAX_RAY_DIST: f64 = 30.; // todo: Adjust this approach A/R.
 const MAX_SHELL_R: f64 = 300.; // todo: Adjust this approach A/R.
 
-const SNAPSHOT_RATIO: usize = 10;
+const SNAPSHOT_RATIO: usize = 20;
 
 const C: f64 = 10.;
 
@@ -49,8 +50,10 @@ const DX_RAY_GRADIENT: f64 = RAY_SAMPLE_WIDTH;
 pub struct Config {
     num_timesteps: usize,
     dt_integration: f64,
+    shell_creation_ratio: usize,
     // dt_pulse: f64,
     num_rays_per_iter: usize,
+    gauss_c: f64,
 }
 
 impl Default for Config {
@@ -58,9 +61,11 @@ impl Default for Config {
         Self {
             // num_timesteps: 2_000,
             num_timesteps: 10_000,
+            shell_creation_ratio: 5,
             // dt_integration: 0.001,
-            dt_integration: 0.0001,
+            dt_integration: 0.001,
             num_rays_per_iter: 200,
+            gauss_c: 0.5,
         }
     }
 }
@@ -204,6 +209,8 @@ fn density_gradient(
     rays: &[GravRay],
     shells: &[GravShell],
     emitter_id: usize,
+    dt: f64,
+    shell_c: f64,
 ) -> Vec3 {
     // let rect_this = SampleRect::new(posit, RAY_SAMPLE_WIDTH);
 
@@ -218,12 +225,12 @@ fn density_gradient(
 
     // let properties_this = rect_this.measure_properties(rays);
 
-    let properties_x_prev = rect_x_prev.measure_properties(rays, shells, emitter_id);
-    let properties_x_next = rect_x_next.measure_properties(rays, shells, emitter_id);
-    let properties_y_prev = rect_y_prev.measure_properties(rays, shells, emitter_id);
-    let properties_y_next = rect_y_next.measure_properties(rays, shells, emitter_id);
-    let properties_z_prev = rect_z_prev.measure_properties(rays, shells, emitter_id);
-    let properties_z_next = rect_z_next.measure_properties(rays, shells, emitter_id);
+    let properties_x_prev = rect_x_prev.measure_properties(rays, shells, emitter_id, dt, shell_c);
+    let properties_x_next = rect_x_next.measure_properties(rays, shells, emitter_id, dt, shell_c);
+    let properties_y_prev = rect_y_prev.measure_properties(rays, shells, emitter_id, dt, shell_c);
+    let properties_y_next = rect_y_next.measure_properties(rays, shells, emitter_id, dt, shell_c);
+    let properties_z_prev = rect_z_prev.measure_properties(rays, shells, emitter_id, dt, shell_c);
+    let properties_z_next = rect_z_next.measure_properties(rays, shells, emitter_id, dt, shell_c);
 
     Vec3::new(
         (properties_x_next.ray_density - properties_x_prev.ray_density) / 2.,
@@ -238,35 +245,6 @@ fn density_gradient(
     // // todo: Is this the divergence property, or should we take the gradient using finite difference
     // // todo from two sample rect locations?
     // let gradient = Vec3::new_zero();
-}
-
-// todo: DRY
-// todo: Unless we want to apply accel etc to these rays, RK4 here is not required; accel
-// todo is always 0, and v is always c.
-fn integrate_rk4_ray(rays: &mut [GravRay], dt: f64) {
-    // todo: Pending further exporation, no grav accel on rays.
-    let a = Vec3::new_zero();
-
-    for body in rays.iter_mut() {
-        // Step 1: Calculate the k-values for position and velocity
-        let k1_v = a;
-        let k1_posit = body.vel * dt;
-
-        let k2_v = a;
-        let k2_posit = (body.vel + k1_v * 0.5) * dt;
-
-        let k3_v = a;
-        let k3_posit = (body.vel + k2_v * 0.5) * dt;
-
-        let k4_v = a;
-        let k4_posit = (body.vel + k3_v) * dt;
-
-        // Step 2: Update position and velocity using weighted average of k-values
-        // body.vel += (k1_v + k2_v * 2. + k3_v * 2. + k4_v) / 6.;
-
-        // Vel is constant; C.
-        body.posit += (k1_posit + k2_posit * 2. + k3_posit * 2. + k4_posit) / 6.;
-    }
 }
 
 /// A rectangular prism for sampling properties (generally an "infinitessimal" volume.
@@ -291,6 +269,8 @@ impl SampleRect {
         rays: &[GravRay],
         shells: &[GravShell],
         emitter_id: usize,
+        dt: f64,
+        shell_c: f64,
     ) -> SampleProperties {
         let volume = {
             let dist_x = self.end.x - self.start.x;
@@ -334,7 +314,7 @@ impl SampleRect {
         // let mut shell_inner = None;
         // let mut shell_outer = None;
 
-        let acc_shell = accel::calc_acc_shell(shells, sample_center, emitter_id);
+        let acc_shell = accel::calc_acc_shell(shells, sample_center, emitter_id, dt, shell_c);
 
         // todo: To calculate div and curl, we need multiple sets of rays.
 
@@ -419,15 +399,15 @@ struct SampleProperties {
 fn build(state: &mut State) {
     for t in 0..state.config.num_timesteps {
         // Create a new set of rays.
-        for (id, body) in state.bodies.iter().enumerate() {
-            // todo temp RM
-            for _ in 0..state.config.num_rays_per_iter {
-                // state.rays.push(body.create_ray(id));
+        if t % state.config.shell_creation_ratio == 0 {
+            for (id, body) in state.bodies.iter().enumerate() {
+                // todo temp RM
+                for _ in 0..state.config.num_rays_per_iter {
+                    // state.rays.push(body.create_ray(id));
+                }
+                state.shells.push(body.create_shell(id));
             }
-            state.shells.push(body.create_shell(id));
         }
-
-        state.remove_far_rays();
 
         for (i, body) in state.bodies.iter_mut().enumerate() {
             // body.accel = accel::accel(
@@ -437,24 +417,32 @@ fn build(state: &mut State) {
             //     i,
             //     state.config.dt_integration,
             // );
-            body.accel = accel::accel_shells(
+
+            body.accel = accel::acc_shells(
                 body,
                 &state.rays,
                 &state.shells,
                 i,
                 state.config.dt_integration,
+                state.config.gauss_c,
             );
         }
 
         // Update ray propogation
-        integrate_rk4_ray(&mut state.rays, state.config.dt_integration);
+        // integrate::integrate_rk4_ray(&mut state.rays, state.config.dt_integration);
+        // state.remove_far_rays();
 
         for shell in &mut state.shells {
             shell.radius += C * state.config.dt_integration;
         }
 
         // Update body motion.
-        // integrate_rk4(&mut state.bodies, state.config.dt_integration);
+        // todo: Put back
+        // integrate::integrate_rk4(
+        //     &mut state.bodies,
+        //     &state.shells,
+        //     state.config.dt_integration * state.config.shell_creation_ratio as f64,
+        // );
 
         // Save the current state to a snapshot, for later playback.
         // Note: This can use a substantial amount of memory.
@@ -479,7 +467,7 @@ fn main() {
         },
         Body {
             posit: Vec3::new(3., 0., 0.),
-            vel: Vec3::new(0.01, 0., 0.), // todo tmep
+            vel: Vec3::new(0.0, 0., 0.),
             accel: Vec3::new_zero(),
             mass: 1.,
             V_acting_on: Vec3::new_zero(),
@@ -487,14 +475,6 @@ fn main() {
     ];
 
     build(&mut state);
-
-    // todo: Temp. Testing our approach
-    // let acc = accel(&mut state.bodies[1], &state.rays, 1);
-
-    // todo: We must discount etc the body's own rays. ANd possibly consider their
-    // todo significance.
-
-    // println!("Acc: {:?}", acc);
 
     println!("Complete. Rendering.");
 
