@@ -48,6 +48,17 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 ui.label(&format!("V at Body {i}:"));
                 ui.label(&format!("{:?}", body_V));
             }
+
+            ui.add_space(COL_SPACING);
+
+            for (i, body_V) in state.snapshots[state.ui.snapshot_selected]
+                .acc_at_bodies
+                .iter()
+                .enumerate()
+            {
+                ui.label(&format!("Acc at Body {i}:"));
+                ui.label(&format!("{:?}", body_V));
+            }
         });
     });
 

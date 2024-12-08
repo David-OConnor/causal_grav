@@ -2,9 +2,15 @@
 //!
 
 use graphics::Entity;
-use lin_alg::f32::{Quaternion, Vec3 as Vec3f32};
+use lin_alg::{
+    f32::{Quaternion, Vec3 as Vec3f32},
+    f64::Vec3,
+};
 
-use crate::render::{BODY_COLOR, BODY_SHINYNESS, BODY_SIZE, RAY_COLORS, RAY_SHINYNESS, RAY_SIZE};
+use crate::{
+    render::{BODY_COLOR, BODY_SHINYNESS, BODY_SIZE, RAY_COLORS, RAY_SHINYNESS, RAY_SIZE},
+    GravShell,
+};
 
 #[derive(Debug)]
 pub struct SnapShot {
@@ -13,10 +19,17 @@ pub struct SnapShot {
     // during the integration.
     pub body_posits: Vec<Vec3f32>,
     pub V_at_bodies: Vec<Vec3f32>,
+    pub acc_at_bodies: Vec<Vec3f32>,
     // todo: Determine if you want to store and show these.
     // todo: Store a posit and a velocity for rays A/R.
     // The usize is body id.
     pub rays: Vec<(Vec3f32, usize)>,
+    // todo: Compact form for shells, as above?
+    pub shells: Vec<GravShell>,
+}
+
+pub fn vec_to_f32(v: Vec3) -> Vec3f32 {
+    Vec3f32::new(v.x as f32, v.y as f32, v.z as f32)
 }
 
 pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot) {
@@ -45,14 +58,14 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot) {
     }
 
     // todo: Draw an actual shell instead of a sphere.
-    // for (shell_posit, shell_radius, body_id) in &snapshot.shells {
-    //     entities.push(Entity::new(
-    //         0,
-    //         *shell_posit,
-    //         Quaternion::new_identity(),
-    //         shell_radius,
-    //         RAY_COLORS[body_id % RAY_COLORS.len()],
-    //         RAY_SHINYNESS,
-    //     ));
-    // }
+    for shell in &snapshot.shells {
+        entities.push(Entity::new(
+            0,
+            vec_to_f32(shell.center),
+            Quaternion::new_identity(),
+            shell.radius as f32,
+            RAY_COLORS[shell.emitter_id % RAY_COLORS.len()],
+            RAY_SHINYNESS,
+        ));
+    }
 }

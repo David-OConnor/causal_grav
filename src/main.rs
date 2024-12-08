@@ -5,7 +5,11 @@ use std::f64::consts::TAU;
 use lin_alg::{f32::Vec3 as Vec3f32, f64::Vec3};
 use rand::Rng;
 
-use crate::{gaussian::GaussianShell, playback::SnapShot, render::render};
+use crate::{
+    gaussian::GaussianShell,
+    playback::{vec_to_f32, SnapShot},
+    render::render,
+};
 // Add this to use the random number generator
 
 mod gaussian;
@@ -89,24 +93,38 @@ impl State {
     }
 
     fn take_snapshot(&mut self, time: usize) {
+        let mut accs = Vec::new();
+        let mut accs_shell = Vec::new();
+
+        for (i, body) in self.bodies.iter_mut().enumerate() {
+            let acc = accel(
+                body,
+                &self.rays,
+                &self.shells,
+                i,
+                self.config.dt_integration,
+            );
+            let acc_shell = accel_shells(
+                body,
+                &self.rays,
+                &self.shells,
+                i,
+                self.config.dt_integration,
+            );
+
+            accs.push(acc);
+            accs_shell.push(acc_shell);
+        }
+
         self.snapshots.push(SnapShot {
             time,
-            body_posits: self
-                .bodies
-                .iter()
-                .map(|b| Vec3f32::new(b.posit.x as f32, b.posit.y as f32, b.posit.z as f32))
-                .collect(),
+            body_posits: self.bodies.iter().map(|b| vec_to_f32(b.posit)).collect(),
             V_at_bodies: self
                 .bodies
                 .iter()
-                .map(|b| {
-                    Vec3f32::new(
-                        b.V_acting_on.x as f32,
-                        b.V_acting_on.y as f32,
-                        b.V_acting_on.z as f32,
-                    )
-                })
+                .map(|b| vec_to_f32(b.V_acting_on))
                 .collect(),
+            acc_at_bodies: accs_shell.iter().map(|a| vec_to_f32(*a)).collect(),
             rays: self
                 .rays
                 .iter()
@@ -117,6 +135,8 @@ impl State {
                     )
                 })
                 .collect(),
+            // shells: self.shells.clone(),
+            shells: Vec::new(),
         })
     }
 }
@@ -463,7 +483,7 @@ struct GravRay {
     src_mass: f64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct GravShell {
     emitter_id: usize,
     center: Vec3,
@@ -518,9 +538,9 @@ struct SampleProperties {
 /// Entry point for computation; rename A/R.
 fn build(state: &mut State) {
     // todo temp
-    let mut acc = Vec3::new_zero();
-    let mut acc_shell = Vec3::new_zero();
-    let mut counter = 0;
+    // let mut acc = Vec3::new_zero();
+    // let mut acc_shell = Vec3::new_zero();
+    // let mut counter = 0;
 
     for t in 0..state.config.num_timesteps {
         // Create a new set of rays.
@@ -551,32 +571,32 @@ fn build(state: &mut State) {
             state.take_snapshot(t / SNAPSHOT_RATIO);
         }
 
-        // todo temp
-        if t + 30 >= state.config.num_timesteps {
-            counter += 1;
-            acc += accel(
-                &mut state.bodies[1],
-                &state.rays,
-                &state.shells,
-                1,
-                state.config.dt_integration,
-            );
-            acc_shell += accel_shells(
-                &mut state.bodies[1],
-                &state.rays,
-                &state.shells,
-                1,
-                state.config.dt_integration,
-            );
-        }
+        //     // todo temp
+        //     if t + 30 >= state.config.num_timesteps {
+        //         counter += 1;
+        //         acc += accel(
+        //             &mut state.bodies[1],
+        //             &state.rays,
+        //             &state.shells,
+        //             1,
+        //             state.config.dt_integration,
+        //         );
+        //         acc_shell += accel_shells(
+        //             &mut state.bodies[1],
+        //             &state.rays,
+        //             &state.shells,
+        //             1,
+        //             state.config.dt_integration,
+        //         );
+        //     }
     }
-
-    println!("SHELLS: {:?}", state.shells.len());
-
-    // todo temp
-    acc = acc / counter as f64;
-    acc_shell = acc_shell / counter as f64;
-    println!("Acc net: {:?}. Shell: {:?}", acc, acc_shell);
+    //
+    // println!("SHELLS: {:?}", state.shells.len());
+    //
+    // // todo temp
+    // acc = acc / counter as f64;
+    // acc_shell = acc_shell / counter as f64;
+    // println!("Acc net: {:?}. Shell: {:?}", acc, acc_shell);
 }
 
 fn main() {
