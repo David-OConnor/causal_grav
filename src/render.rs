@@ -33,6 +33,8 @@ pub const RAY_COLORS: [Color; 5] = [
     (1., 0.0, 1.0),
 ];
 
+pub const SHELL_OPACITY: f32 = 0.01;
+
 fn event_handler(
     _state: &mut State,
     _event: DeviceEvent,
@@ -50,7 +52,7 @@ fn render_handler(_state: &mut State, _scene: &mut Scene, _dt: f32) -> EngineUpd
 /// Entry point to our render and event loop.
 pub fn render(state: State) {
     let mut scene = Scene {
-        meshes: vec![Mesh::new_sphere(1., 12, 12)],
+        meshes: vec![Mesh::new_sphere(1., 12, 12), Mesh::new_sphere(1., 30, 30)],
         entities: Vec::new(), // updated below.
         camera: Camera {
             fov_y: TAU / 8.,

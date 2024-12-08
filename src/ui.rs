@@ -52,7 +52,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.add_space(COL_SPACING);
 
             for (i, body_V) in state.snapshots[state.ui.snapshot_selected]
-                .acc_at_bodies
+                .body_accs
                 .iter()
                 .enumerate()
             {

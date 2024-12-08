@@ -8,7 +8,9 @@ use lin_alg::{
 };
 
 use crate::{
-    render::{BODY_COLOR, BODY_SHINYNESS, BODY_SIZE, RAY_COLORS, RAY_SHINYNESS, RAY_SIZE},
+    render::{
+        BODY_COLOR, BODY_SHINYNESS, BODY_SIZE, RAY_COLORS, RAY_SHINYNESS, RAY_SIZE, SHELL_OPACITY,
+    },
     GravShell,
 };
 
@@ -19,7 +21,7 @@ pub struct SnapShot {
     // during the integration.
     pub body_posits: Vec<Vec3f32>,
     pub V_at_bodies: Vec<Vec3f32>,
-    pub acc_at_bodies: Vec<Vec3f32>,
+    pub body_accs: Vec<Vec3f32>,
     // todo: Determine if you want to store and show these.
     // todo: Store a posit and a velocity for rays A/R.
     // The usize is body id.
@@ -59,13 +61,16 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot) {
 
     // todo: Draw an actual shell instead of a sphere.
     for shell in &snapshot.shells {
-        entities.push(Entity::new(
-            0,
+        let mut entity = Entity::new(
+            1,
             vec_to_f32(shell.center),
             Quaternion::new_identity(),
             shell.radius as f32,
             RAY_COLORS[shell.emitter_id % RAY_COLORS.len()],
             RAY_SHINYNESS,
-        ));
+        );
+        // entity.opacity = SHELL_OPACITY;
+        entity.opacity = 0.; // todo temp
+        entities.push(entity);
     }
 }
