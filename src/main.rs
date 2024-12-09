@@ -6,7 +6,6 @@ use lin_alg::{f32::Vec3 as Vec3f32, f64::Vec3};
 use rand::Rng;
 
 use crate::{
-    gaussian::GaussianShell,
     playback::{vec_to_f32, SnapShot},
     render::render,
 };
@@ -35,7 +34,7 @@ const MAX_SHELL_R: f64 = 300.; // todo: Adjust this approach A/R.
 
 const SNAPSHOT_RATIO: usize = 20;
 
-const C: f64 = 10.;
+const C: f64 = 100.;
 
 // todo: A/R
 // This cubed is d-volume
@@ -437,12 +436,12 @@ fn build(state: &mut State) {
         }
 
         // Update body motion.
-        // todo: Put back
-        // integrate::integrate_rk4(
-        //     &mut state.bodies,
-        //     &state.shells,
-        //     state.config.dt_integration * state.config.shell_creation_ratio as f64,
-        // );
+        integrate::integrate_rk4(
+            &mut state.bodies,
+            &state.shells,
+            state.config.dt_integration * state.config.shell_creation_ratio as f64,
+            state.config.gauss_c,
+        );
 
         // Save the current state to a snapshot, for later playback.
         // Note: This can use a substantial amount of memory.
@@ -466,8 +465,8 @@ fn main() {
             V_acting_on: Vec3::new_zero(),
         },
         Body {
-            posit: Vec3::new(3., 0., 0.),
-            vel: Vec3::new(0.0, 0., 0.),
+            posit: Vec3::new(2., 0., 0.),
+            vel: Vec3::new(0.0, 0.2, 0.),
             accel: Vec3::new_zero(),
             mass: 1.,
             V_acting_on: Vec3::new_zero(),

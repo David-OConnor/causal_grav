@@ -61,17 +61,17 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot) {
 
     // todo: Draw an actual shell instead of a sphere.
     // todo: Add back once you sort out transparency.
-    // for shell in &snapshot.shells {
-    //     let mut entity = Entity::new(
-    //         1,
-    //         vec_to_f32(shell.center),
-    //         Quaternion::new_identity(),
-    //         shell.radius as f32,
-    //         RAY_COLORS[shell.emitter_id % RAY_COLORS.len()],
-    //         RAY_SHINYNESS,
-    //     );
-    //     // entity.opacity = SHELL_OPACITY;
-    //     entity.opacity = 0.; // todo temp
-    //     entities.push(entity);
-    // }
+    for shell in &snapshot.shells {
+        // let mut entity = Entity::new(
+        //     1,
+        //     vec_to_f32(shell.center),
+        //     Quaternion::new_identity(),
+        //     shell.radius as f32,
+        //     RAY_COLORS[shell.emitter_id % RAY_COLORS.len()],
+        //     RAY_SHINYNESS,
+        // );
+        // // entity.opacity = SHELL_OPACITY;
+        // entity.opacity = 0.; // todo temp
+        // entities.push(entity);
+    }
 }
