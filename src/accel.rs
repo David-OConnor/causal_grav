@@ -28,18 +28,6 @@ pub fn acc_rays(
 
     properties.ray_net_direction * properties.ray_density * rate_const
 
-    // todo: We need to take into account the destination body's mass, not just
-    // todo for inertia, but for attraction... right?
-
-    // todo: We may be missing part of the puzzle.
-    // let force = gradient * body.mass;
-
-    // a = F / m
-    // force / body.mass
-
-    // body.V_acting_on = ray_density_grad;
-
-    // ray_density_grad
 }
 
 /// Calculate the force acting on a body, given the local environment of gravity shells intersecting it.
@@ -55,8 +43,6 @@ pub fn acc_shells(
     let properties = rect.measure_properties(rays, shells, emitter_id, dt, shell_c);
 
     // todo: Is this too indirect?
-
-    // println!("Prop: {:?}", properties);
 
     properties.acc_shell
 }
@@ -96,4 +82,18 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, emitter_id: usize, dt: 
     let compensator = dt / 0.5280041;
 
     shell_acc_sum * compensator
+}
+
+/// An instantaneous-accel control.
+pub fn calc_acc_inst(body: &Body, bodies_other: &[Body], dt: f64) -> Vec3 {
+    let mut result = Vec3::new_zero();
+
+    for body_other in bodies_other {
+        let diff = body_other.posit - body.posit;
+        // let force = diff / diff.magnitude_squared(); // todo: QC
+        let force = diff / diff.magnitude().powi(3); // todo: QC
+        result += force / body.mass;
+    }
+
+    result
 }
