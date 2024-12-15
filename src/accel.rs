@@ -30,22 +30,22 @@ pub fn acc_rays(
 
 }
 
-/// Calculate the force acting on a body, given the local environment of gravity shells intersecting it.
-pub fn acc_shells(
-    body: &Body,
-    rays: &[GravRay],
-    shells: &[GravShell],
-    emitter_id: usize,
-    dt: f64,
-    shell_c: f64,
-) -> Vec3 {
-    let rect = SampleRect::new(body.posit, RAY_SAMPLE_WIDTH);
-    let properties = rect.measure_properties(rays, shells, emitter_id, dt, shell_c);
-
-    // todo: Is this too indirect?
-
-    properties.acc_shell
-}
+// /// Calculate the force acting on a body, given the local environment of gravity shells intersecting it.
+// pub fn acc_shells(
+//     body: &Body,
+//     rays: &[GravRay],
+//     shells: &[GravShell],
+//     emitter_id: usize,
+//     dt: f64,
+//     shell_c: f64,
+// ) -> Vec3 {
+//     let rect = SampleRect::new(body.posit, RAY_SAMPLE_WIDTH);
+//     let properties = rect.measure_properties(rays, shells, emitter_id, dt, shell_c);
+//
+//     // todo: Is this too indirect?
+//
+//     properties.acc_shell
+// }
 
 pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, emitter_id: usize, dt: f64, shell_c: f64) -> Vec3 {
     let mut shell_value = 0.;
@@ -85,14 +85,17 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, emitter_id: usize, dt: 
 }
 
 /// An instantaneous-accel control.
-pub fn calc_acc_inst(body: &Body, bodies_other: &[Body], dt: f64) -> Vec3 {
+pub fn calc_acc_inst(posit: Vec3, bodies_other: &[Body], body_id: usize) -> Vec3 {
     let mut result = Vec3::new_zero();
 
-    for body_other in bodies_other {
-        let diff = body_other.posit - body.posit;
+    for (i, body_other) in bodies_other.iter().enumerate() {
+        if i == body_id {
+            continue // self-interaction.
+        }
+
+        let diff = body_other.posit - posit;
         // let force = diff / diff.magnitude_squared(); // todo: QC
-        let force = diff / diff.magnitude().powi(3); // todo: QC
-        result += force / body.mass;
+        result += diff * body_other.mass / diff.magnitude().powi(3); // todo: QC
     }
 
     result

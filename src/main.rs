@@ -123,6 +123,7 @@ impl State {
     }
 }
 
+#[derive(Clone)]
 struct Body {
     posit: Vec3,
     vel: Vec3,
@@ -417,14 +418,16 @@ fn build(state: &mut State) {
             //     state.config.dt_integration,
             // );
 
-            body.accel = accel::acc_shells(
-                body,
-                &state.rays,
-                &state.shells,
-                i,
-                state.config.dt_integration,
-                state.config.gauss_c,
-            );
+            // body.accel = accel::acc_shells(
+            //     body,
+            //     &state.rays,
+            //     &state.shells,
+            //     i,
+            //     state.config.dt_integration,
+            //     state.config.gauss_c,
+            // );
+
+            // body.accel = accel::calc_acc_shell(&state.shells, body.posit, i, state.config.dt_integration, state.config.gauss_c);
         }
 
         // Update ray propogation
