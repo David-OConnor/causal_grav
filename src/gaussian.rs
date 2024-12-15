@@ -8,6 +8,9 @@
 //! - We can select a constant, `COEFF_C`, to multiply spacing by, to balance uniformity vs falloff.
 //! - We must scale amplitude down, according to a rule I haven't determined that depends only on `COEFF_C`.
 //!
+//! todo: Update: It appears in your calcs below and assumptions above, you may be missing part of the effect
+//! of spacing on uniformity.
+//!
 //! Recommendation:
 //!
 //!
@@ -22,12 +25,12 @@ use lin_alg::f64::Vec3;
 //
 // A higher coefficient results in a more uniform distribution, at the cost of responsiveness at the edges.
 // 0.55: Sharper falloff. 0.6: More uniform distribution.
-pub const COEFF_C: f64 = 0.55;
-// pub const COEFF_C: f64 = 0.6;
 
-pub const AMP_SCALER: f64 = 0.665; // Based on COEFF = 0.6. Found from trial + error using `gauss_spacing.py`.
-// pub const AMP_SCALER: f64 = 0.7253; // Based on COEFF = 0.55. Found from trial + error using `gauss_spacing.py`.
+pub const COEFF_C: f64 = 0.6;
+// pub const COEFF_C: f64 = 0.55;
 
+pub const AMP_SCALER: f64 = 0.6649; // Based on COEFF = 0.6. Found from trial + error using `gauss_spacing.py`.
+                                    // pub const AMP_SCALER: f64 = 0.7253; // Based on COEFF = 0.55. Found from trial + error using `gauss_spacing.py`.
 
 #[derive(Debug)]
 pub struct GaussianShell {

@@ -6,10 +6,10 @@ use lin_alg::{f32::Vec3 as Vec3f32, f64::Vec3};
 use rand::Rng;
 
 use crate::{
+    gaussian::COEFF_C,
     playback::{vec_to_f32, SnapShot},
     render::render,
 };
-use crate::gaussian::COEFF_C;
 // Add this to use the random number generator
 
 mod accel;
@@ -59,7 +59,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         let dt_integration = 0.01;
-        let shell_creation_ratio =  5;
+        let shell_creation_ratio = 5;
 
         // In distance: t * d/t = d.
         let shell_spacing = dt_integration * shell_creation_ratio as f64 * C;
@@ -71,7 +71,7 @@ impl Default for Config {
             // dt_integration: 0.001,
             dt_integration,
             num_rays_per_iter: 200,
-            gauss_c: shell_spacing * COEFF_C
+            gauss_c: shell_spacing * COEFF_C,
         }
     }
 }
@@ -217,7 +217,7 @@ fn density_gradient(
     shells: &[GravShell],
     emitter_id: usize,
     dt: f64,
-    shell_c: f64,
+    gauss_c: f64,
 ) -> Vec3 {
     // let rect_this = SampleRect::new(posit, RAY_SAMPLE_WIDTH);
 
@@ -232,12 +232,12 @@ fn density_gradient(
 
     // let properties_this = rect_this.measure_properties(rays);
 
-    let properties_x_prev = rect_x_prev.measure_properties(rays, shells, emitter_id, dt, shell_c);
-    let properties_x_next = rect_x_next.measure_properties(rays, shells, emitter_id, dt, shell_c);
-    let properties_y_prev = rect_y_prev.measure_properties(rays, shells, emitter_id, dt, shell_c);
-    let properties_y_next = rect_y_next.measure_properties(rays, shells, emitter_id, dt, shell_c);
-    let properties_z_prev = rect_z_prev.measure_properties(rays, shells, emitter_id, dt, shell_c);
-    let properties_z_next = rect_z_next.measure_properties(rays, shells, emitter_id, dt, shell_c);
+    let properties_x_prev = rect_x_prev.measure_properties(rays, shells, emitter_id, dt, gauss_c);
+    let properties_x_next = rect_x_next.measure_properties(rays, shells, emitter_id, dt, gauss_c);
+    let properties_y_prev = rect_y_prev.measure_properties(rays, shells, emitter_id, dt, gauss_c);
+    let properties_y_next = rect_y_next.measure_properties(rays, shells, emitter_id, dt, gauss_c);
+    let properties_z_prev = rect_z_prev.measure_properties(rays, shells, emitter_id, dt, gauss_c);
+    let properties_z_next = rect_z_next.measure_properties(rays, shells, emitter_id, dt, gauss_c);
 
     Vec3::new(
         (properties_x_next.ray_density - properties_x_prev.ray_density) / 2.,
@@ -321,7 +321,7 @@ impl SampleRect {
         // let mut shell_inner = None;
         // let mut shell_outer = None;
 
-        let acc_shell = accel::calc_acc_shell(shells, sample_center, emitter_id, dt, shell_c);
+        let acc_shell = accel::calc_acc_shell(shells, sample_center, emitter_id, shell_c);
 
         // todo: To calculate div and curl, we need multiple sets of rays.
 
@@ -434,7 +434,7 @@ fn build(state: &mut State) {
             //     state.config.gauss_c,
             // );
 
-            // body.accel = accel::calc_acc_shell(&state.shells, body.posit, i, state.config.dt_integration, state.config.gauss_c);
+            // body.accel = accel::calc_acc_shell(&state.shells, body.posit, i, state.config.gauss_c);
         }
 
         // Update ray propogation
@@ -450,8 +450,8 @@ fn build(state: &mut State) {
             &mut state.bodies,
             &state.shells,
             state.config.dt_integration,
-            state.config.dt_integration * state.config.shell_creation_ratio as f64,
             state.config.gauss_c,
+            false,
         );
 
         // Save the current state to a snapshot, for later playback.
@@ -478,7 +478,7 @@ fn main() {
         },
         Body {
             posit: Vec3::new(2., 0., 0.),
-            vel: Vec3::new(0.0, 0.6, 0.),
+            vel: Vec3::new(0.0, 8., 0.),
             accel: Vec3::new_zero(),
             mass: 1.,
             V_acting_on: Vec3::new_zero(),

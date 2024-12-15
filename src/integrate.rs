@@ -2,29 +2,47 @@ use lin_alg::f64::Vec3;
 
 use crate::{accel, Body, GravRay, GravShell};
 
-pub fn integrate_rk4(bodies: &mut Vec<Body>, shells: &[GravShell], dt: f64, dt_shell: f64, shell_c: f64) {
+pub fn integrate_rk4(
+    bodies: &mut Vec<Body>,
+    shells: &[GravShell],
+    dt: f64,
+    gauss_c: f64,
+    acc_inst: bool,
+) {
     let bodies_other = bodies.clone(); // todo: I don't like this. Avoids mut error.
     for (id, body) in bodies.iter_mut().enumerate() {
         // Step 1: Calculate the k-values for position and velocity
-        body.accel = accel::calc_acc_shell(shells, body.posit, id, dt_shell, shell_c) * dt;
-        // body.accel = accel::calc_acc_inst(body.posit, &bodies_other, id) * dt;
+        body.accel = if acc_inst {
+            accel::calc_acc_inst(body.posit, &bodies_other, id) * dt
+        } else {
+            accel::calc_acc_shell(shells, body.posit, id, gauss_c) * dt
+        };
 
         let k1_v = body.accel * dt;
         let k1_posit = body.vel * dt;
 
         let body_pos_k2 = body.posit + k1_posit * 0.5;
-        let k2_v = accel::calc_acc_shell(shells, body_pos_k2, id, dt_shell, shell_c) * dt;
-        // let k2_v = accel::calc_acc_inst(body_pos_k2, &bodies_other, id) * dt;
+        let k2_v = if acc_inst {
+            accel::calc_acc_inst(body_pos_k2, &bodies_other, id) * dt
+        } else {
+            accel::calc_acc_shell(shells, body_pos_k2, id, gauss_c) * dt
+        };
         let k2_posit = (body.vel + k1_v * 0.5) * dt;
 
         let body_pos_k3 = body.posit + k2_posit * 0.5;
-        let k3_v = accel::calc_acc_shell(shells, body_pos_k3, id, dt_shell, shell_c) * dt;
-        // let k3_v = accel::calc_acc_inst(body_pos_k3, &bodies_other, id)  * dt;
+        let k3_v = if acc_inst {
+            accel::calc_acc_inst(body_pos_k3, &bodies_other, id) * dt
+        } else {
+            accel::calc_acc_shell(shells, body_pos_k3, id, gauss_c) * dt
+        };
         let k3_posit = (body.vel + k2_v * 0.5) * dt;
 
         let body_pos_k4 = body.posit + k3_posit;
-        let k4_v = accel::calc_acc_shell(shells, body_pos_k4, id, dt_shell, shell_c) * dt;
-        // let k4_v = accel::calc_acc_inst(body_pos_k4, &bodies_other, id)  * dt;
+        let k4_v = if acc_inst {
+            accel::calc_acc_inst(body_pos_k4, &bodies_other, id) * dt
+        } else {
+            accel::calc_acc_shell(shells, body_pos_k4, id, gauss_c) * dt
+        };
         let k4_posit = (body.vel + k3_v) * dt;
 
         // Step 2: Update position and velocity using weighted average of k-values

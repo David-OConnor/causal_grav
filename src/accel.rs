@@ -2,8 +2,10 @@
 
 use lin_alg::f64::Vec3;
 
-use crate::{gaussian::GaussianShell, Body, GravRay, GravShell, SampleRect, RAY_SAMPLE_WIDTH};
-use crate::gaussian::AMP_SCALER;
+use crate::{
+    gaussian::{GaussianShell, AMP_SCALER},
+    Body, GravRay, GravShell, SampleRect, RAY_SAMPLE_WIDTH,
+};
 
 /// Calculate the force acting on a body, given the local environment of gravity rays around it.
 pub fn acc_rays(
@@ -12,7 +14,7 @@ pub fn acc_rays(
     shells: &[GravShell],
     emitter_id: usize,
     dt: f64,
-    shell_c: f64
+    shell_c: f64,
 ) -> Vec3 {
     // let ray_density_grad = density_gradient(body.posit, rays);
 
@@ -28,7 +30,6 @@ pub fn acc_rays(
     // let rate_const = 1. / dt; // todo: we can pre-calc this, but not a big deal.
 
     properties.ray_net_direction * properties.ray_density * rate_const
-
 }
 
 // /// Calculate the force acting on a body, given the local environment of gravity shells intersecting it.
@@ -48,9 +49,9 @@ pub fn acc_rays(
 //     properties.acc_shell
 // }
 
-pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, emitter_id: usize, dt: f64, shell_c: f64) -> Vec3 {
+pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, emitter_id: usize, shell_c: f64) -> Vec3 {
     let mut shell_value = 0.;
-    let mut shell_acc_sum = Vec3::new_zero();
+    let mut result = Vec3::new_zero();
 
     // todo: Once you have more than one body acting on a target, you need to change this, so you get
     // todo exactly 0 or 1 shells per other body.
@@ -62,43 +63,32 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, emitter_id: usize, dt: 
         let gauss = GaussianShell {
             center: shell.center,
             radius: shell.radius,
-            a: 1.,  // Keep at one; scales magnitude
+            a: 1., // Keep at one; scales magnitude
             c: shell_c,
         };
-        // shell_value += shell.src_mass * gauss.value(posit) / (shell.center - posit).magnitude_squared();
-        // todo: Experimenting.
-        shell_value +=
-            shell.src_mass * gauss.value(posit) / (shell.center - posit).magnitude().powi(3);
 
-        let shell_acc_dir = (shell.center - posit).to_normalized();
-        shell_acc_sum += shell_acc_dir * shell_value; // todo: QC order
+        let acc_dir = shell.center - posit;
 
-        // if shell.intersects_rect(self) {
-        //     println!("Intersects: {:?}", shell);
-        //     acc_shell + (shell.center - center) * shell.src_mass / shell.radius.powi(2);
-        // }
+        shell_value += shell.src_mass * gauss.value(posit) / acc_dir.magnitude().powi(3);
+
+        result += acc_dir * shell_value;
     }
 
-    // todo: How do we calculate this? Involtes DT (shell creation), gauss c, and what else?
-    // let compensator = dt / 0.5280041;
-
-    let compensator = AMP_SCALER;
-
-    shell_acc_sum * compensator
+    result * AMP_SCALER
 }
 
 /// An instantaneous-accel control.
-pub fn calc_acc_inst(posit: Vec3, bodies_other: &[Body], body_id: usize) -> Vec3 {
+pub fn calc_acc_inst(posit: Vec3, bodies_other: &[Body], emitter_id: usize) -> Vec3 {
     let mut result = Vec3::new_zero();
 
-    for (i, body_other) in bodies_other.iter().enumerate() {
-        if i == body_id {
-            continue // self-interaction.
+    for (i, body_src) in bodies_other.iter().enumerate() {
+        if i == emitter_id {
+            continue; // self-interaction.
         }
 
-        let diff = body_other.posit - posit;
-        // let force = diff / diff.magnitude_squared(); // todo: QC
-        result += diff * body_other.mass / diff.magnitude().powi(3); // todo: QC
+        let acc_dir = body_src.posit - posit;
+
+        result += acc_dir * body_src.mass / acc_dir.magnitude().powi(3);
     }
 
     result

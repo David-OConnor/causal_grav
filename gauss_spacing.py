@@ -12,22 +12,23 @@ NUM_X = int(1e4)
 X_RANGE = (0., 12.)
 
 GAUSS_START = 2.
-GAUSS_SPACING = 1.
+GAUSS_SPACING = 0.4
 
 NUM_GAUS = 8
 
 A = 1.
-# C_COEFF = 0.6
-C_COEFF = 0.55
+C_COEFF = 0.6
+# C_COEFF = 0.55
 C = GAUSS_SPACING * C_COEFF
 
 # Used to offset the amplitude increase that arrises from combining gaussians.
 # AMP_SCALER = 1. - C_COEFF**2
-# AMP_SCALER = 0.665  # for coeff = 0.6
-AMP_SCALER = 0.7253 # for coeff = 0.55
+AMP_SCALER = 0.6649  # for coeff = 0.6
+# AMP_SCALER = 0.7253 # for coeff = 0.55
 
 def gauss(ctr: float, a: float, c: float, posit_eval: float) -> float:
-    return a * np.exp(-((posit_eval - ctr) ** 2) / (2. * c ** 2))
+    x = posit_eval - ctr
+    return a * np.exp(-(x ** 2) / (2. * c ** 2))
 
 
 def main():
