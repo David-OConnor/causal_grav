@@ -62,9 +62,9 @@ impl Default for Config {
             num_timesteps: 10_000,
             shell_creation_ratio: 5,
             // dt_integration: 0.001,
-            dt_integration: 0.001,
+            dt_integration: 0.01,
             num_rays_per_iter: 200,
-            gauss_c: 0.5,
+            gauss_c: 0.2,
         }
     }
 }
@@ -442,6 +442,7 @@ fn build(state: &mut State) {
         integrate::integrate_rk4(
             &mut state.bodies,
             &state.shells,
+            state.config.dt_integration,
             state.config.dt_integration * state.config.shell_creation_ratio as f64,
             state.config.gauss_c,
         );
@@ -463,13 +464,14 @@ fn main() {
         Body {
             posit: Vec3::new_zero(),
             vel: Vec3::new_zero(),
+            // vel: Vec3::new(0.0, -0.05, 0.),
             accel: Vec3::new_zero(),
-            mass: 1.,
+            mass: 100.,
             V_acting_on: Vec3::new_zero(),
         },
         Body {
             posit: Vec3::new(2., 0., 0.),
-            vel: Vec3::new(0.0, 0.2, 0.),
+            vel: Vec3::new(0.0, 0.6, 0.),
             accel: Vec3::new_zero(),
             mass: 1.,
             V_acting_on: Vec3::new_zero(),
