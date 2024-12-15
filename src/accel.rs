@@ -3,6 +3,7 @@
 use lin_alg::f64::Vec3;
 
 use crate::{gaussian::GaussianShell, Body, GravRay, GravShell, SampleRect, RAY_SAMPLE_WIDTH};
+use crate::gaussian::AMP_SCALER;
 
 /// Calculate the force acting on a body, given the local environment of gravity rays around it.
 pub fn acc_rays(
@@ -79,7 +80,9 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, emitter_id: usize, dt: 
     }
 
     // todo: How do we calculate this? Involtes DT (shell creation), gauss c, and what else?
-    let compensator = dt / 0.5280041;
+    // let compensator = dt / 0.5280041;
+
+    let compensator = AMP_SCALER;
 
     shell_acc_sum * compensator
 }

@@ -9,6 +9,7 @@ use crate::{
     playback::{vec_to_f32, SnapShot},
     render::render,
 };
+use crate::gaussian::COEFF_C;
 // Add this to use the random number generator
 
 mod accel;
@@ -57,14 +58,20 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
+        let dt_integration = 0.01;
+        let shell_creation_ratio =  5;
+
+        // In distance: t * d/t = d.
+        let shell_spacing = dt_integration * shell_creation_ratio as f64 * C;
+
         Self {
             // num_timesteps: 2_000,
             num_timesteps: 10_000,
-            shell_creation_ratio: 5,
+            shell_creation_ratio,
             // dt_integration: 0.001,
-            dt_integration: 0.01,
+            dt_integration,
             num_rays_per_iter: 200,
-            gauss_c: 0.2,
+            gauss_c: shell_spacing * COEFF_C
         }
     }
 }
