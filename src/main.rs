@@ -6,7 +6,7 @@ use lin_alg::{f32::Vec3 as Vec3f32, f64::Vec3};
 use rand::Rng;
 
 use crate::{
-    gaussian::COEFF_C,
+    gaussian::{COEFF_C, MAX_SHELL_R},
     playback::{vec_to_f32, SnapShot},
     render::render,
 };
@@ -31,44 +31,36 @@ const M_ELEC: f64 = 1.;
 const Q_ELEC: f64 = -1.;
 
 const MAX_RAY_DIST: f64 = 30.; // todo: Adjust this approach A/R.
-const MAX_SHELL_R: f64 = 300.; // todo: Adjust this approach A/R.
 
 const SNAPSHOT_RATIO: usize = 20;
 
-const C: f64 = 100.;
+const C: f64 = 1000.;
 
-// todo: A/R
 // This cubed is d-volume
 const RAY_SAMPLE_WIDTH: f64 = 0.8;
 
 // We use this to calculate divergence of ray density, numerically.
 const DX_RAY_GRADIENT: f64 = RAY_SAMPLE_WIDTH;
 
-// Don't calculate force if particles are farther than this from each other. Computation saver.
-// const MAX_DIST: f64 = 0.1;
-
 pub struct Config {
     num_timesteps: usize,
     dt_integration: f64,
     shell_creation_ratio: usize,
-    // dt_pulse: f64,
     num_rays_per_iter: usize,
     gauss_c: f64,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        let dt_integration = 0.01;
-        let shell_creation_ratio = 5;
+        let dt_integration = 0.001;
+        let shell_creation_ratio = 3;
 
         // In distance: t * d/t = d.
         let shell_spacing = dt_integration * shell_creation_ratio as f64 * C;
 
         Self {
-            // num_timesteps: 2_000,
-            num_timesteps: 10_000,
+            num_timesteps: 15_000,
             shell_creation_ratio,
-            // dt_integration: 0.001,
             dt_integration,
             num_rays_per_iter: 200,
             gauss_c: shell_spacing * COEFF_C,
@@ -232,12 +224,12 @@ fn density_gradient(
 
     // let properties_this = rect_this.measure_properties(rays);
 
-    let properties_x_prev = rect_x_prev.measure_properties(rays, shells, emitter_id, dt, gauss_c);
-    let properties_x_next = rect_x_next.measure_properties(rays, shells, emitter_id, dt, gauss_c);
-    let properties_y_prev = rect_y_prev.measure_properties(rays, shells, emitter_id, dt, gauss_c);
-    let properties_y_next = rect_y_next.measure_properties(rays, shells, emitter_id, dt, gauss_c);
-    let properties_z_prev = rect_z_prev.measure_properties(rays, shells, emitter_id, dt, gauss_c);
-    let properties_z_next = rect_z_next.measure_properties(rays, shells, emitter_id, dt, gauss_c);
+    let properties_x_prev = rect_x_prev.measure_properties(rays, shells, emitter_id, gauss_c);
+    let properties_x_next = rect_x_next.measure_properties(rays, shells, emitter_id, gauss_c);
+    let properties_y_prev = rect_y_prev.measure_properties(rays, shells, emitter_id, gauss_c);
+    let properties_y_next = rect_y_next.measure_properties(rays, shells, emitter_id, gauss_c);
+    let properties_z_prev = rect_z_prev.measure_properties(rays, shells, emitter_id, gauss_c);
+    let properties_z_next = rect_z_next.measure_properties(rays, shells, emitter_id, gauss_c);
 
     Vec3::new(
         (properties_x_next.ray_density - properties_x_prev.ray_density) / 2.,
@@ -276,7 +268,6 @@ impl SampleRect {
         rays: &[GravRay],
         shells: &[GravShell],
         emitter_id: usize,
-        dt: f64,
         shell_c: f64,
     ) -> SampleProperties {
         let volume = {
@@ -445,14 +436,18 @@ fn build(state: &mut State) {
             shell.radius += C * state.config.dt_integration;
         }
 
-        // Update body motion.
-        integrate::integrate_rk4(
-            &mut state.bodies,
-            &state.shells,
-            state.config.dt_integration,
-            state.config.gauss_c,
-            false,
-        );
+        // Allow waves to propogate to reach a steady state, ideally.
+        if t > 1_000 {
+            // Update body motion.
+            integrate::integrate_rk4(
+                &mut state.bodies,
+                &state.shells,
+                state.config.dt_integration,
+                state.config.gauss_c,
+                false,
+                // true,
+            );
+        }
 
         // Save the current state to a snapshot, for later playback.
         // Note: This can use a substantial amount of memory.
@@ -480,7 +475,7 @@ fn main() {
             posit: Vec3::new(2., 0., 0.),
             vel: Vec3::new(0.0, 8., 0.),
             accel: Vec3::new_zero(),
-            mass: 1.,
+            mass: 0.0001,
             V_acting_on: Vec3::new_zero(),
         },
     ];

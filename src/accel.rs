@@ -13,13 +13,12 @@ pub fn acc_rays(
     rays: &[GravRay],
     shells: &[GravShell],
     emitter_id: usize,
-    dt: f64,
     shell_c: f64,
 ) -> Vec3 {
     // let ray_density_grad = density_gradient(body.posit, rays);
 
     let rect = SampleRect::new(body.posit, RAY_SAMPLE_WIDTH);
-    let properties = rect.measure_properties(rays, shells, emitter_id, dt, shell_c);
+    let properties = rect.measure_properties(rays, shells, emitter_id, shell_c);
 
     // println!("Prop: {:?}", properties);
 
@@ -50,7 +49,6 @@ pub fn acc_rays(
 // }
 
 pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, emitter_id: usize, shell_c: f64) -> Vec3 {
-    let mut shell_value = 0.;
     let mut result = Vec3::new_zero();
 
     // todo: Once you have more than one body acting on a target, you need to change this, so you get
@@ -63,15 +61,13 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, emitter_id: usize, shel
         let gauss = GaussianShell {
             center: shell.center,
             radius: shell.radius,
-            a: 1., // Keep at one; scales magnitude
+            a: 1., // Keep at one; we handle magnitude below.
             c: shell_c,
         };
 
         let acc_dir = shell.center - posit;
 
-        shell_value += shell.src_mass * gauss.value(posit) / acc_dir.magnitude().powi(3);
-
-        result += acc_dir * shell_value;
+        result += acc_dir * shell.src_mass * gauss.value(posit) / acc_dir.magnitude().powi(3);
     }
 
     result * AMP_SCALER
