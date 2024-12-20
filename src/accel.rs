@@ -85,6 +85,8 @@ pub fn calc_acc_inst(posit: Vec3, bodies_other: &[Body], emitter_id: usize) -> V
         let acc_dir = body_src.posit - posit;
 
         result += acc_dir * body_src.mass / acc_dir.magnitude().powi(3);
+
+        // println!("RESULT: {:?}, Acc dir: {:?}", result, acc_dir);
     }
 
     result

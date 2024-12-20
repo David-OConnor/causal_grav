@@ -10,44 +10,37 @@ pub fn integrate_rk4(
     acc_inst: bool,
 ) {
     let bodies_other = bodies.clone(); // todo: I don't like this. Avoids mut error.
+
+    let acc = |id, posit| {
+        if acc_inst {
+            accel::calc_acc_inst(posit, &bodies_other, id)
+        } else {
+            accel::calc_acc_shell(shells, posit, id, gauss_c)
+        }
+    };
+
     for (id, body) in bodies.iter_mut().enumerate() {
         // Step 1: Calculate the k-values for position and velocity
-        body.accel = if acc_inst {
-            accel::calc_acc_inst(body.posit, &bodies_other, id) * dt
-        } else {
-            accel::calc_acc_shell(shells, body.posit, id, gauss_c) * dt
-        };
+        body.accel = acc(id, body.posit);
 
         let k1_v = body.accel * dt;
-        let k1_posit = body.vel * dt;
+        let k1_pos = body.vel * dt;
 
-        let body_pos_k2 = body.posit + k1_posit * 0.5;
-        let k2_v = if acc_inst {
-            accel::calc_acc_inst(body_pos_k2, &bodies_other, id) * dt
-        } else {
-            accel::calc_acc_shell(shells, body_pos_k2, id, gauss_c) * dt
-        };
-        let k2_posit = (body.vel + k1_v * 0.5) * dt;
+        let body_pos_k2 = body.posit + k1_pos * 0.5;
+        let k2_v = acc(id, body_pos_k2) * dt;
+        let k2_pos = (body.vel + k1_v * 0.5) * dt;
 
-        let body_pos_k3 = body.posit + k2_posit * 0.5;
-        let k3_v = if acc_inst {
-            accel::calc_acc_inst(body_pos_k3, &bodies_other, id) * dt
-        } else {
-            accel::calc_acc_shell(shells, body_pos_k3, id, gauss_c) * dt
-        };
-        let k3_posit = (body.vel + k2_v * 0.5) * dt;
+        let body_pos_k3 = body.posit + k2_pos * 0.5;
+        let k3_v = acc(id, body_pos_k3) * dt;
+        let k3_pos = (body.vel + k2_v * 0.5) * dt;
 
-        let body_pos_k4 = body.posit + k3_posit;
-        let k4_v = if acc_inst {
-            accel::calc_acc_inst(body_pos_k4, &bodies_other, id) * dt
-        } else {
-            accel::calc_acc_shell(shells, body_pos_k4, id, gauss_c) * dt
-        };
-        let k4_posit = (body.vel + k3_v) * dt;
+        let body_pos_k4 = body.posit + k3_pos;
+        let k4_v = acc(id, body_pos_k4) * dt;
+        let k4_pos = (body.vel + k3_v) * dt;
 
         // Step 2: Update position and velocity using weighted average of k-values
         body.vel += (k1_v + k2_v * 2. + k3_v * 2. + k4_v) / 6.;
-        body.posit += (k1_posit + k2_posit * 2. + k3_posit * 2. + k4_posit) / 6.;
+        body.posit += (k1_pos + k2_pos * 2. + k3_pos * 2. + k4_pos) / 6.;
     }
 }
 

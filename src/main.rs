@@ -27,6 +27,14 @@ mod ui;
 // todo: Next, try having the electrons add up to more than 1 charge.
 // todo: Try to quantify the elec density, so you can compare it to Schrodinger.
 
+// Re MOND and our wavefront propogation. Something that could cause a reduced falloff of gravitation
+// at distances:
+//
+// - A reduced wave propogation speed at distances (Causing the waves to be closer together; amplitude
+// scales inverse proportionally to propogation speed C.) for a given generation rate
+//
+// Some sort of cumulative drag?? Can we estimate and test this?
+
 const M_ELEC: f64 = 1.;
 const Q_ELEC: f64 = -1.;
 
@@ -53,7 +61,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         let dt_integration = 0.001;
-        let shell_creation_ratio = 3;
+        let shell_creation_ratio = 6;
 
         // In distance: t * d/t = d.
         let shell_spacing = dt_integration * shell_creation_ratio as f64 * C;
@@ -117,7 +125,6 @@ impl State {
                 })
                 .collect(),
             shells: self.shells.clone(),
-            // shells: Vec::new(),
         })
     }
 }
@@ -437,7 +444,7 @@ fn build(state: &mut State) {
         }
 
         // Allow waves to propogate to reach a steady state, ideally.
-        if t > 1_000 {
+        if t > 3_000 {
             // Update body motion.
             integrate::integrate_rk4(
                 &mut state.bodies,
