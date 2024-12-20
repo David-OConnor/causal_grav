@@ -21,7 +21,7 @@ pub fn integrate_rk4(
 
     for (id, body) in bodies.iter_mut().enumerate() {
         // Step 1: Calculate the k-values for position and velocity
-        body.accel = acc(id, body.posit);
+        // body.accel = acc(id, body.posit); // todo: Temp placed before fn.
 
         let k1_v = body.accel * dt;
         let k1_pos = body.vel * dt;

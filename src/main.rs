@@ -42,7 +42,8 @@ const MAX_RAY_DIST: f64 = 30.; // todo: Adjust this approach A/R.
 
 const SNAPSHOT_RATIO: usize = 20;
 
-const C: f64 = 1000.;
+// Note: Setting this too high is problematic.
+const C: f64 = 100.;
 
 // This cubed is d-volume
 const RAY_SAMPLE_WIDTH: f64 = 0.8;
@@ -442,17 +443,34 @@ fn build(state: &mut State) {
         for shell in &mut state.shells {
             shell.radius += C * state.config.dt_integration;
         }
+to work
+        let acc_inst = true;
+
+        // todo: C+P from integrate, so we can test acc vals.
+        let bodies_other = state.bodies.clone(); // todo: I don't like this. Avoids mut error.
+
+        let acc = |id, posit| {
+            if acc_inst {
+                accel::calc_acc_inst(posit, &bodies_other, id)
+            } else {
+                accel::calc_acc_shell(&state.shells, posit, id, state.config.gauss_c)
+            }
+        };
+
+        for (id, body) in &mut state.bodies.iter_mut().enumerate() {
+            body.accel = acc(id, body.posit);
+        }
+
 
         // Allow waves to propogate to reach a steady state, ideally.
-        if t > 3_000 {
+        if t > 1_000 {
             // Update body motion.
             integrate::integrate_rk4(
                 &mut state.bodies,
                 &state.shells,
                 state.config.dt_integration,
                 state.config.gauss_c,
-                false,
-                // true,
+                acc_inst,
             );
         }
 
