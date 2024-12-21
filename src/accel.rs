@@ -67,7 +67,10 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, emitter_id: usize, shel
 
         let acc_dir = shell.center - posit;
 
-        result += acc_dir * shell.src_mass * gauss.value(posit) / acc_dir.magnitude().powi(3);
+        let acc_mag = acc_dir.magnitude();
+
+
+        result += acc_dir * shell.src_mass * gauss.value(posit) / acc_mag.powi(3);
     }
 
     result * AMP_SCALER

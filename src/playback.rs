@@ -20,29 +20,31 @@ pub struct SnapShot {
     // To save memory, we store the snapshots as f32; we only need f64 precision
     // during the integration.
     pub body_posits: Vec<Vec3f32>,
-    pub V_at_bodies: Vec<Vec3f32>,
+    // pub V_at_bodies: Vec<Vec3f32>,
     pub body_accs: Vec<Vec3f32>,
     // todo: Determine if you want to store and show these.
     // todo: Store a posit and a velocity for rays A/R.
     // The usize is body id.
     pub rays: Vec<(Vec3f32, usize)>,
     // todo: Compact form for shells, as above?
-    pub shells: Vec<GravShell>,
+    // pub shells: Vec<GravShell>,
 }
 
 pub fn vec_to_f32(v: Vec3) -> Vec3f32 {
     Vec3f32::new(v.x as f32, v.y as f32, v.z as f32)
 }
 
-pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot) {
-    *entities = Vec::new();
+/// Body masses are separate from the snapshot, since it's invariant.
+pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_masses: &[f32]) {
+    *entities = Vec::with_capacity(entities.len() + snapshot.rays.len());
 
-    for body_posit in &snapshot.body_posits {
+    for (i, body_posit) in snapshot.body_posits.iter().enumerate() {
         entities.push(Entity::new(
             0,
             *body_posit,
             Quaternion::new_identity(),
-            BODY_SIZE,
+            // todo: Set up body masses.
+            BODY_SIZE * body_masses[i],
             BODY_COLOR,
             BODY_SHINYNESS,
         ));
@@ -61,7 +63,7 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot) {
 
     // todo: Draw an actual shell instead of a sphere.
     // todo: Add back once you sort out transparency.
-    for shell in &snapshot.shells {
+    // for shell in &snapshot.shells {
         // let mut entity = Entity::new(
         //     1,
         //     vec_to_f32(shell.center),
@@ -73,5 +75,5 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot) {
         // // entity.opacity = SHELL_OPACITY;
         // entity.opacity = 0.; // todo temp
         // entities.push(entity);
-    }
+    // }
 }

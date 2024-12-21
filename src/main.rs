@@ -1,9 +1,11 @@
 #![allow(non_snake_case)]
+#![allow(non_ascii_idents)]
 
 use std::f64::consts::TAU;
+use rand::Rng;
 
 use lin_alg::{f32::Vec3 as Vec3f32, f64::Vec3};
-use rand::Rng;
+
 
 use crate::{
     gaussian::{COEFF_C, MAX_SHELL_R},
@@ -43,7 +45,7 @@ const MAX_RAY_DIST: f64 = 30.; // todo: Adjust this approach A/R.
 const SNAPSHOT_RATIO: usize = 20;
 
 // Note: Setting this too high is problematic.
-const C: f64 = 100.;
+const C: f64 = 40.;
 
 // This cubed is d-volume
 const RAY_SAMPLE_WIDTH: f64 = 0.8;
@@ -90,6 +92,8 @@ struct State {
     rays: Vec<GravRay>,
     shells: Vec<GravShell>,
     snapshots: Vec<SnapShot>,
+    /// For rendering; separate from snapshots since it's invariant.
+    body_masses: Vec<f32>,
 }
 
 impl State {
@@ -109,11 +113,11 @@ impl State {
         self.snapshots.push(SnapShot {
             time,
             body_posits: self.bodies.iter().map(|b| vec_to_f32(b.posit)).collect(),
-            V_at_bodies: self
-                .bodies
-                .iter()
-                .map(|b| vec_to_f32(b.V_acting_on))
-                .collect(),
+            // V_at_bodies: self
+            //     .bodies
+            //     .iter()
+            //     .map(|b| vec_to_f32(b.V_acting_on))
+            //     .collect(),
             body_accs: self.bodies.iter().map(|b| vec_to_f32(b.accel)).collect(),
             rays: self
                 .rays
@@ -125,7 +129,7 @@ impl State {
                     )
                 })
                 .collect(),
-            shells: self.shells.clone(),
+            // shells: self.shells.clone(),
         })
     }
 }
@@ -136,8 +140,8 @@ struct Body {
     vel: Vec3,
     accel: Vec3,
     mass: f64,
-    /// We use this for debugging, testing etc. It goes in the snapshots.
-    V_acting_on: Vec3,
+    // /// We use this for debugging, testing etc. It goes in the snapshots.
+    // V_acting_on: Vec3,
 }
 
 impl Body {
@@ -443,8 +447,9 @@ fn build(state: &mut State) {
         for shell in &mut state.shells {
             shell.radius += C * state.config.dt_integration;
         }
-to work
+
         let acc_inst = true;
+        // let acc_inst = false;
 
         // todo: C+P from integrate, so we can test acc vals.
         let bodies_other = state.bodies.clone(); // todo: I don't like this. Avoids mut error.
@@ -483,27 +488,67 @@ to work
     }
 }
 
+// todo: Move, i.e. to own module, A/R
+fn make_bodies(
+    n: usize,
+    posit_max_dist: f64,
+    mass_range: (f64, f64),
+    ω_range: (f64, f64),
+) -> Vec<Body> {
+    let mut rng = rand::thread_rng();
+    let mut result = Vec::with_capacity(n);
+
+    for _ in 0..n {
+        // Generate a random position within the maximum distance
+        // todo: QC this posit gen.
+        let r = rng.gen_range(0.0..posit_max_dist);
+        let theta = rng.gen_range(0.0..TAU);
+        let posit = Vec3::new(r * theta.cos(), r * theta.sin(), 0.0);
+
+        // Generate a random mass within the range
+        let mass = rng.gen_range(mass_range.0..mass_range.1);
+
+        // Generate a velocity with an angular velocity in the specified range
+        let ω = rng.gen_range(ω_range.0..ω_range.1);
+        let vel = Vec3::new(-ω * posit.y, ω * posit.x, 0.0);
+
+        // Create the body and add it to the result vector
+        result.push(Body {
+            posit,
+            vel,
+            accel: Vec3::new_zero(),
+            mass,
+        });
+    }
+
+    result
+}
+
 fn main() {
     println!("Building snapshots...");
     let mut state = State::default();
 
-    state.bodies = vec![
-        Body {
-            posit: Vec3::new_zero(),
-            vel: Vec3::new_zero(),
-            // vel: Vec3::new(0.0, -0.05, 0.),
-            accel: Vec3::new_zero(),
-            mass: 100.,
-            V_acting_on: Vec3::new_zero(),
-        },
-        Body {
-            posit: Vec3::new(2., 0., 0.),
-            vel: Vec3::new(0.0, 8., 0.),
-            accel: Vec3::new_zero(),
-            mass: 0.0001,
-            V_acting_on: Vec3::new_zero(),
-        },
-    ];
+    state.bodies = make_bodies(10, 10.,(0., 1_000.), (0.1, 10.));
+
+    // state.bodies = vec![
+    //     Body {
+    //         posit: Vec3::new_zero(),
+    //         // vel: Vec3::new_zero(),
+    //         vel: Vec3::new(0.0, -1., 0.),
+    //         accel: Vec3::new_zero(),
+    //         // mass: 100.,
+    //         mass: 10.,
+    //     },
+    //     Body {
+    //         posit: Vec3::new(2., 0., 0.),
+    //         vel: Vec3::new(0.0, 1., 0.),
+    //         accel: Vec3::new_zero(),
+    //         // mass: 0.0001,
+    //         mass: 10.,
+    //     },
+    // ];
+
+    state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
     build(&mut state);
 
