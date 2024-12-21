@@ -57,8 +57,8 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 .iter()
                 .enumerate()
             {
-                ui.label(&format!("Acc at Body {i}:"));
-                ui.label(&format!("{:?}", body_V));
+                ui.label(format!("Acc at Body {i}:"));
+                ui.label(format!("{:?}", body_V));
             }
         });
 
@@ -68,8 +68,8 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 .iter()
                 .enumerate()
             {
-                ui.label(&format!("Posit Body {i}:"));
-                ui.label(&format!("{:?}", body_p));
+                ui.label(format!("Posit Body {i}:"));
+                ui.label(format!("{:?}", body_p));
             }
         })
     });

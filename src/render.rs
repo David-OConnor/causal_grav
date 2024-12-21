@@ -19,7 +19,7 @@ const BACKGROUND_COLOR: Color = (0.5, 0.5, 0.5);
 
 const RENDER_DIST: f32 = 200.;
 
-pub const BODY_SIZE: f32 = 0.0003; // Note: We scale by mass as well.
+pub const BODY_SIZE: f32 = 0.02; // Note: We scale by mass as well.
 pub const BODY_SHINYNESS: f32 = 2.;
 pub const BODY_COLOR: Color = (1.0, 0.2, 0.2);
 

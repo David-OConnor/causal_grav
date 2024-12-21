@@ -69,7 +69,6 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, emitter_id: usize, shel
 
         let acc_mag = acc_dir.magnitude();
 
-
         result += acc_dir * shell.src_mass * gauss.value(posit) / acc_mag.powi(3);
     }
 

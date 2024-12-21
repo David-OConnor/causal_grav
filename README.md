@@ -21,3 +21,17 @@ Grav field self interactions maybe important.
 
 Lensing affecting force of gravity: Likely. Disc thickness may be important; you can start with a flat disc, but this
 may have to change. What is the affect of disc thickness on roation curves?
+
+
+Thought, re inst acc vs causal:
+ - Gravity from central masses in the system will have a similar effect between the two; they are the same for stationary masses.
+ - Gravity from edge masses will be different, as they move more; it takes a longer time for grav to propograte from these after they move.
+
+
+## Wide binaries
+
+
+## Clusters
+
+
+## Rotation curves

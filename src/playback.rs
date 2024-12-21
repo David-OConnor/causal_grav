@@ -1,6 +1,8 @@
 //! Code related to the playback of computed snapshots.
 //!
 
+use std::cmp::max;
+
 use graphics::Entity;
 use lin_alg::{
     f32::{Quaternion, Vec3 as Vec3f32},
@@ -44,7 +46,7 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
             *body_posit,
             Quaternion::new_identity(),
             // todo: Set up body masses.
-            BODY_SIZE * body_masses[i],
+            f32::min(BODY_SIZE * body_masses[i], 0.7),
             BODY_COLOR,
             BODY_SHINYNESS,
         ));
@@ -64,16 +66,16 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
     // todo: Draw an actual shell instead of a sphere.
     // todo: Add back once you sort out transparency.
     // for shell in &snapshot.shells {
-        // let mut entity = Entity::new(
-        //     1,
-        //     vec_to_f32(shell.center),
-        //     Quaternion::new_identity(),
-        //     shell.radius as f32,
-        //     RAY_COLORS[shell.emitter_id % RAY_COLORS.len()],
-        //     RAY_SHINYNESS,
-        // );
-        // // entity.opacity = SHELL_OPACITY;
-        // entity.opacity = 0.; // todo temp
-        // entities.push(entity);
+    // let mut entity = Entity::new(
+    //     1,
+    //     vec_to_f32(shell.center),
+    //     Quaternion::new_identity(),
+    //     shell.radius as f32,
+    //     RAY_COLORS[shell.emitter_id % RAY_COLORS.len()],
+    //     RAY_SHINYNESS,
+    // );
+    // // entity.opacity = SHELL_OPACITY;
+    // entity.opacity = 0.; // todo temp
+    // entities.push(entity);
     // }
 }

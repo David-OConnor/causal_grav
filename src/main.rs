@@ -2,10 +2,9 @@
 #![allow(non_ascii_idents)]
 
 use std::f64::consts::TAU;
-use rand::Rng;
 
 use lin_alg::{f32::Vec3 as Vec3f32, f64::Vec3};
-
+use rand::Rng;
 
 use crate::{
     gaussian::{COEFF_C, MAX_SHELL_R},
@@ -42,7 +41,7 @@ const Q_ELEC: f64 = -1.;
 
 const MAX_RAY_DIST: f64 = 30.; // todo: Adjust this approach A/R.
 
-const SNAPSHOT_RATIO: usize = 20;
+const SNAPSHOT_RATIO: usize = 4;
 
 // Note: Setting this too high is problematic.
 const C: f64 = 40.;
@@ -134,7 +133,7 @@ impl State {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Body {
     posit: Vec3,
     vel: Vec3,
@@ -466,7 +465,6 @@ fn build(state: &mut State) {
             body.accel = acc(id, body.posit);
         }
 
-
         // Allow waves to propogate to reach a steady state, ideally.
         if t > 1_000 {
             // Update body motion.
@@ -524,11 +522,70 @@ fn make_bodies(
     result
 }
 
+/// Create n bodies, in circular orbit, at equal distances from each other.
+fn make_bodies_balanced(num: usize, r: f64, mass_body: f64, mass_central: f64) -> Vec<Body> {
+    let mut result = Vec::with_capacity(num);
+
+    for i in 0..num {
+        let theta = TAU / num as f64 * i as f64;
+        let posit = Vec3::new(r * theta.cos(), r * theta.sin(), 0.0);
+
+        // Velocity magnitude for circular orbit
+        let v_mag = (mass_central / r).sqrt();
+
+        // Velocity direction: perpendicular to the radius vector
+        let v_x = -v_mag * theta.sin(); // Tangential velocity in x-direction
+        let v_y = v_mag * theta.cos(); // Tangential velocity in y-direction
+
+        let vel = Vec3::new(v_x, v_y, 0.0);
+
+        result.push(Body {
+            posit,
+            vel,
+            accel: Vec3::new_zero(),
+            mass: mass_body,
+        });
+    }
+
+    result
+}
+
 fn main() {
     println!("Building snapshots...");
     let mut state = State::default();
 
-    state.bodies = make_bodies(10, 10.,(0., 1_000.), (0.1, 10.));
+    let ω = TAU * 2.;
+
+    // state.bodies.extend_from_slice(&make_bodies(30, 10.,(0., 100.), (ω - 0.001, ω)));
+
+    // Inner heavy
+    // state.bodies.extend_from_slice(&make_bodies(1, 0.001,(300., 1_000.), (0.0, 0.0001)));
+    // state.bodies.push(Body {
+    //     posit: Vec3::new_zero(),
+    //     vel: Vec3::new_zero(),
+    //     accel: Vec3::new_zero(),
+    //     mass: 1_000.,
+    // });
+
+    let mass_central = 1_000.;
+    state.bodies = vec![Body {
+        posit: Vec3::new_zero(),
+        vel: Vec3::new_zero(),
+        accel: Vec3::new_zero(),
+        mass: mass_central,
+    }];
+    // todo: the central mass method here isn't correct, as it neglects the other masses.
+    state
+        .bodies
+        .extend_from_slice(&make_bodies_balanced(3, 2., 10., mass_central));
+    state
+        .bodies
+        .extend_from_slice(&make_bodies_balanced(3, 5., 10., mass_central));
+    state
+        .bodies
+        .extend_from_slice(&make_bodies_balanced(2, 10., 10., mass_central));
+
+    println!("Bodies: {:?}", state.bodies);
 
     // state.bodies = vec![
     //     Body {

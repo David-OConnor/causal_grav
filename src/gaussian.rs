@@ -63,12 +63,13 @@ impl GaussianShell {
         // is symmetric around 0.
 
         // Attempt at a performance saver. // todo: QC that this doesn't introduce problems.
-        if x_1d > self.c * 5. { // todo: Adjust a/r.
+        if x_1d > self.c * 5. {
+            // todo: Adjust a/r.
             // let test_r = self.a * (-x_1d.powi(2) / (2. * self.c.powi(2))).exp();
             // if test_r > 0.00001 {
             //     println!("Test R: {:?}", test_r);
             // }
-            return 0.
+            return 0.;
         }
 
         // Calculate the 1D gaussian value, using its standard definition.
