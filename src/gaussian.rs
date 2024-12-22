@@ -26,7 +26,8 @@ use lin_alg::f64::Vec3;
 // A higher coefficient results in a more uniform distribution, at the cost of responsiveness at the edges.
 // 0.55: Sharper falloff. 0.6: More uniform distribution.
 
-pub const MAX_SHELL_R: f64 = 50.; // todo: Adjust this approach A/R.
+// pub const MAX_SHELL_R: f64 = 50.; // todo: Adjust this approach A/R.
+pub const MAX_SHELL_R: f64 = 20.; // todo: Adjust this approach A/R.
 
 pub const COEFF_C: f64 = 0.6;
 // pub const COEFF_C: f64 = 0.55;

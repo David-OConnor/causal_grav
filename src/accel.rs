@@ -4,32 +4,8 @@ use lin_alg::f64::Vec3;
 
 use crate::{
     gaussian::{GaussianShell, AMP_SCALER},
-    Body, GravRay, GravShell, SampleRect, RAY_SAMPLE_WIDTH,
+    Body, GravShell,
 };
-
-/// Calculate the force acting on a body, given the local environment of gravity rays around it.
-pub fn acc_rays(
-    body: &mut Body,
-    rays: &[GravRay],
-    shells: &[GravShell],
-    emitter_id: usize,
-    shell_c: f64,
-) -> Vec3 {
-    // let ray_density_grad = density_gradient(body.posit, rays);
-
-    let rect = SampleRect::new(body.posit, RAY_SAMPLE_WIDTH);
-    let properties = rect.measure_properties(rays, shells, emitter_id, shell_c);
-
-    // println!("Prop: {:?}", properties);
-
-    // todo: The rate constant must take into account the angle of the rays; dividing by dt
-    // todo is likely only to work in the limit of infinitely small d_theta for ray emission, etc.
-    // todo: Divide by a rate constant.
-    let rate_const = 460.;
-    // let rate_const = 1. / dt; // todo: we can pre-calc this, but not a big deal.
-
-    properties.ray_net_direction * properties.ray_density * rate_const
-}
 
 // /// Calculate the force acting on a body, given the local environment of gravity shells intersecting it.
 // pub fn acc_shells(
@@ -86,7 +62,11 @@ pub fn calc_acc_inst(posit: Vec3, bodies_other: &[Body], emitter_id: usize) -> V
 
         let acc_dir = body_src.posit - posit;
 
-        result += acc_dir * body_src.mass / acc_dir.magnitude().powi(3);
+        // todo: A/R.
+        const SOFTENING_FACTOR_SQ: f64 = 0.001;
+
+        result += acc_dir * body_src.mass / (acc_dir.magnitude().powi(3) + SOFTENING_FACTOR_SQ);
+        // result += acc_dir * body_src.mass / (acc_dir.magnitude().powi(3));
 
         // println!("RESULT: {:?}, Acc dir: {:?}", result, acc_dir);
     }

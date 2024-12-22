@@ -1,20 +1,13 @@
 //! Code related to the playback of computed snapshots.
 //!
 
-use std::cmp::max;
-
 use graphics::Entity;
 use lin_alg::{
     f32::{Quaternion, Vec3 as Vec3f32},
     f64::Vec3,
 };
 
-use crate::{
-    render::{
-        BODY_COLOR, BODY_SHINYNESS, BODY_SIZE, RAY_COLORS, RAY_SHINYNESS, RAY_SIZE, SHELL_OPACITY,
-    },
-    GravShell,
-};
+use crate::render::{BODY_COLOR, BODY_SHINYNESS, BODY_SIZE};
 
 #[derive(Debug)]
 pub struct SnapShot {
@@ -27,7 +20,7 @@ pub struct SnapShot {
     // todo: Determine if you want to store and show these.
     // todo: Store a posit and a velocity for rays A/R.
     // The usize is body id.
-    pub rays: Vec<(Vec3f32, usize)>,
+    // pub rays: Vec<(Vec3f32, usize)>,
     // todo: Compact form for shells, as above?
     // pub shells: Vec<GravShell>,
 }
@@ -38,7 +31,8 @@ pub fn vec_to_f32(v: Vec3) -> Vec3f32 {
 
 /// Body masses are separate from the snapshot, since it's invariant.
 pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_masses: &[f32]) {
-    *entities = Vec::with_capacity(entities.len() + snapshot.rays.len());
+    // *entities = Vec::with_capacity(entities.len() + snapshot.rays.len());
+    *entities = Vec::with_capacity(entities.len());
 
     for (i, body_posit) in snapshot.body_posits.iter().enumerate() {
         entities.push(Entity::new(
@@ -52,16 +46,16 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
         ));
     }
 
-    for (ray_posit, body_id) in &snapshot.rays {
-        entities.push(Entity::new(
-            0,
-            *ray_posit,
-            Quaternion::new_identity(),
-            RAY_SIZE,
-            RAY_COLORS[body_id % RAY_COLORS.len()],
-            RAY_SHINYNESS,
-        ));
-    }
+    // for (ray_posit, body_id) in &snapshot.rays {
+    //     entities.push(Entity::new(
+    //         0,
+    //         *ray_posit,
+    //         Quaternion::new_identity(),
+    //         RAY_SIZE,
+    //         RAY_COLORS[body_id % RAY_COLORS.len()],
+    //         RAY_SHINYNESS,
+    //     ));
+    // }
 
     // todo: Draw an actual shell instead of a sphere.
     // todo: Add back once you sort out transparency.

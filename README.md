@@ -26,6 +26,9 @@ may have to change. What is the affect of disc thickness on roation curves?
 Thought, re inst acc vs causal:
  - Gravity from central masses in the system will have a similar effect between the two; they are the same for stationary masses.
  - Gravity from edge masses will be different, as they move more; it takes a longer time for grav to propograte from these after they move.
+ - For rotating masses like galaxies, perhaps the causal setup would cause no notable affects to the distribution
+vice the naive n-body simulation, as each angular area is interchangeable. Would masses migrating radially change this?
+
 
 
 ## Wide binaries

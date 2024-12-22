@@ -3,8 +3,8 @@
 use std::f32::consts::TAU;
 
 use graphics::{
-    Camera, ControlScheme, DeviceEvent, EngineUpdates, Entity, InputSettings, LightType, Lighting,
-    Mesh, PointLight, Scene, UiLayout, UiSettings,
+    Camera, ControlScheme, DeviceEvent, EngineUpdates, InputSettings, LightType, Lighting, Mesh,
+    PointLight, Scene, UiLayout, UiSettings,
 };
 use lin_alg::f32::{Quaternion, Vec3};
 
@@ -19,19 +19,9 @@ const BACKGROUND_COLOR: Color = (0.5, 0.5, 0.5);
 
 const RENDER_DIST: f32 = 200.;
 
-pub const BODY_SIZE: f32 = 0.02; // Note: We scale by mass as well.
+pub const BODY_SIZE: f32 = 0.01; // Note: We scale by mass as well.
 pub const BODY_SHINYNESS: f32 = 2.;
 pub const BODY_COLOR: Color = (1.0, 0.2, 0.2);
-
-pub const RAY_SIZE: f32 = 0.005;
-pub const RAY_SHINYNESS: f32 = 2.;
-pub const RAY_COLORS: [Color; 5] = [
-    (1., 1.0, 0.2),
-    (0.5, 0.7, 1.),
-    (0., 0., 0.9),
-    (0.9, 0.3, 0.2),
-    (1., 0.0, 1.0),
-];
 
 pub const SHELL_OPACITY: f32 = 0.01;
 

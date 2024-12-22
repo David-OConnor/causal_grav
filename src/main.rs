@@ -1,9 +1,7 @@
 #![allow(non_snake_case)]
 #![allow(non_ascii_idents)]
 
-use std::f64::consts::TAU;
-
-use lin_alg::{f32::Vec3 as Vec3f32, f64::Vec3};
+use lin_alg::f64::Vec3;
 use rand::Rng;
 
 use crate::{
@@ -14,6 +12,7 @@ use crate::{
 // Add this to use the random number generator
 
 mod accel;
+mod body_creation;
 mod gaussian;
 mod integrate;
 mod playback;
@@ -28,6 +27,17 @@ mod ui;
 // todo: Next, try having the electrons add up to more than 1 charge.
 // todo: Try to quantify the elec density, so you can compare it to Schrodinger.
 
+// todo: Soften gravity at short distances to prevent unstability?
+// todo: F = G*m1*m2/(R^2 + eps^2)
+
+// todo: Try adaptive time-steps, i.e. tighter steps whenever bodies get close to each other.
+
+// todo: Use soft masses:  Bodies get a finite radius. Use plummer or hernquist potentials. (Similar to force softening?)
+
+// todo: Thermal velocities? Init the system consistent with virial equilibrium.
+
+// todo: Symplectit integrators: Leapfrog/WIdsom-Homan.
+
 // Re MOND and our wavefront propogation. Something that could cause a reduced falloff of gravitation
 // at distances:
 //
@@ -36,27 +46,16 @@ mod ui;
 //
 // Some sort of cumulative drag?? Can we estimate and test this?
 
-const M_ELEC: f64 = 1.;
-const Q_ELEC: f64 = -1.;
-
-const MAX_RAY_DIST: f64 = 30.; // todo: Adjust this approach A/R.
-
 const SNAPSHOT_RATIO: usize = 4;
 
 // Note: Setting this too high is problematic.
 const C: f64 = 40.;
 
-// This cubed is d-volume
-const RAY_SAMPLE_WIDTH: f64 = 0.8;
-
-// We use this to calculate divergence of ray density, numerically.
-const DX_RAY_GRADIENT: f64 = RAY_SAMPLE_WIDTH;
-
 pub struct Config {
     num_timesteps: usize,
     dt_integration: f64,
     shell_creation_ratio: usize,
-    num_rays_per_iter: usize,
+    // num_rays_per_iter: usize,
     gauss_c: f64,
 }
 
@@ -72,7 +71,7 @@ impl Default for Config {
             num_timesteps: 15_000,
             shell_creation_ratio,
             dt_integration,
-            num_rays_per_iter: 200,
+            // num_rays_per_iter: 200,
             gauss_c: shell_spacing * COEFF_C,
         }
     }
@@ -88,23 +87,18 @@ struct State {
     config: Config,
     ui: StateUi,
     bodies: Vec<Body>,
-    rays: Vec<GravRay>,
+    // rays: Vec<GravRay>,
     shells: Vec<GravShell>,
     snapshots: Vec<SnapShot>,
     /// For rendering; separate from snapshots since it's invariant.
     body_masses: Vec<f32>,
+    /// Defaults to `Config::dt_integration`, but becomes more precise when
+    /// bodies are close.
+    dt_dynamic: f64,
 }
 
 impl State {
-    /// Remove rays that are far from the area of interest, for performance reasons.
-    /// todo: This is crude; improve it to be more efficient.
-    fn remove_far_rays(&mut self) {
-        self.rays.retain(|ray| {
-            ray.posit.x <= MAX_RAY_DIST
-                && ray.posit.y <= MAX_RAY_DIST
-                && ray.posit.z <= MAX_RAY_DIST
-        });
-
+    fn remove_far_shells(&mut self) {
         self.shells.retain(|shell| shell.radius <= MAX_SHELL_R);
     }
 
@@ -118,16 +112,16 @@ impl State {
             //     .map(|b| vec_to_f32(b.V_acting_on))
             //     .collect(),
             body_accs: self.bodies.iter().map(|b| vec_to_f32(b.accel)).collect(),
-            rays: self
-                .rays
-                .iter()
-                .map(|r| {
-                    (
-                        Vec3f32::new(r.posit.x as f32, r.posit.y as f32, r.posit.z as f32),
-                        r.emitter_id,
-                    )
-                })
-                .collect(),
+            // rays: self
+            //     .rays
+            //     .iter()
+            //     .map(|r| {
+            //         (
+            //             Vec3f32::new(r.posit.x as f32, r.posit.y as f32, r.posit.z as f32),
+            //             r.emitter_id,
+            //         )
+            //     })
+            //     .collect(),
             // shells: self.shells.clone(),
         })
     }
@@ -144,28 +138,6 @@ struct Body {
 }
 
 impl Body {
-    /// Generate a ray traveling in a random direction.
-    pub fn create_ray(&self, emitter_id: usize) -> GravRay {
-        let mut rng = rand::thread_rng();
-
-        // todo: You could also generate a random quaternion.
-
-        let theta = rng.gen_range(0.0..TAU); // Random angle in [0, 𝜏)
-        let cos_phi = rng.gen_range(-1.0..1.0); // Uniform in [-1, 1]
-        let sin_phi = (1.0_f64 - cos_phi * cos_phi).sqrt();
-
-        let x = sin_phi * theta.cos();
-        let y = sin_phi * theta.sin();
-        let z = cos_phi;
-        let unit_vec = Vec3::new(x, y, z);
-        GravRay {
-            emitter_id,
-            posit: self.posit,
-            vel: unit_vec * C,
-            src_mass: self.mass,
-        }
-    }
-
     /// Generate a shell traveling outward.
     pub fn create_shell(&self, emitter_id: usize) -> GravShell {
         GravShell {
@@ -212,146 +184,6 @@ impl Body {
 //     result
 // }
 
-/// We are treating the ray density gradient as a proxy for gravitational potential.
-/// Calculate it numberically.
-fn density_gradient(
-    posit: Vec3,
-    rays: &[GravRay],
-    shells: &[GravShell],
-    emitter_id: usize,
-    dt: f64,
-    gauss_c: f64,
-) -> Vec3 {
-    // let rect_this = SampleRect::new(posit, RAY_SAMPLE_WIDTH);
-
-    let rect_x_prev = SampleRect::new(posit - Vec3::new(DX_RAY_GRADIENT, 0., 0.), RAY_SAMPLE_WIDTH);
-    let rect_x_next = SampleRect::new(posit + Vec3::new(DX_RAY_GRADIENT, 0., 0.), RAY_SAMPLE_WIDTH);
-
-    let rect_y_prev = SampleRect::new(posit - Vec3::new(0., DX_RAY_GRADIENT, 0.), RAY_SAMPLE_WIDTH);
-    let rect_y_next = SampleRect::new(posit + Vec3::new(0., DX_RAY_GRADIENT, 0.), RAY_SAMPLE_WIDTH);
-
-    let rect_z_prev = SampleRect::new(posit - Vec3::new(0., 0., DX_RAY_GRADIENT), RAY_SAMPLE_WIDTH);
-    let rect_z_next = SampleRect::new(posit + Vec3::new(0., 0., DX_RAY_GRADIENT), RAY_SAMPLE_WIDTH);
-
-    // let properties_this = rect_this.measure_properties(rays);
-
-    let properties_x_prev = rect_x_prev.measure_properties(rays, shells, emitter_id, gauss_c);
-    let properties_x_next = rect_x_next.measure_properties(rays, shells, emitter_id, gauss_c);
-    let properties_y_prev = rect_y_prev.measure_properties(rays, shells, emitter_id, gauss_c);
-    let properties_y_next = rect_y_next.measure_properties(rays, shells, emitter_id, gauss_c);
-    let properties_z_prev = rect_z_prev.measure_properties(rays, shells, emitter_id, gauss_c);
-    let properties_z_next = rect_z_next.measure_properties(rays, shells, emitter_id, gauss_c);
-
-    Vec3::new(
-        (properties_x_next.ray_density - properties_x_prev.ray_density) / 2.,
-        (properties_y_next.ray_density - properties_y_prev.ray_density) / 2.,
-        (properties_z_next.ray_density - properties_z_prev.ray_density) / 2.,
-    )
-    //
-    // // todo: QC this etc
-    // // Potential
-    // let V_this = properties_this.ray_density;
-    //
-    // // todo: Is this the divergence property, or should we take the gradient using finite difference
-    // // todo from two sample rect locations?
-    // let gradient = Vec3::new_zero();
-}
-
-/// A rectangular prism for sampling properties (generally an "infinitessimal" volume.
-struct SampleRect {
-    pub start: Vec3,
-    pub end: Vec3,
-}
-
-impl SampleRect {
-    /// Create a rectangle of a giFven size, centered on a position
-    /// todo: Accept d-volume instead of width?
-    pub fn new(posit: Vec3, width: f64) -> Self {
-        let w_div2 = width / 2.;
-        Self {
-            start: Vec3::new(posit.x - w_div2, posit.y - w_div2, posit.z - w_div2),
-            end: Vec3::new(posit.x + w_div2, posit.y + w_div2, posit.z + w_div2),
-        }
-    }
-
-    fn measure_properties(
-        &self,
-        rays: &[GravRay],
-        shells: &[GravShell],
-        emitter_id: usize,
-        shell_c: f64,
-    ) -> SampleProperties {
-        let volume = {
-            let dist_x = self.end.x - self.start.x;
-            let dist_y = self.end.y - self.start.y;
-            let dist_z = self.end.z - self.start.z;
-
-            (dist_x.powi(2) + dist_y.powi(2) + dist_z.powi(2)).sqrt()
-        };
-
-        let mut ray_value = 0.;
-        let mut ray_vel_sum = Vec3::new_zero();
-
-        for ray in rays {
-            // A method to avoid self-interaction.
-            if ray.emitter_id == emitter_id {
-                continue;
-            }
-
-            if ray.posit.x >= self.start.x
-                && ray.posit.x <= self.end.x
-                && ray.posit.y >= self.start.y
-                && ray.posit.y <= self.end.y
-                && ray.posit.z >= self.start.z
-                && ray.posit.z <= self.end.z
-            {
-                ray_value += ray.src_mass;
-                ray_vel_sum += ray.vel;
-            }
-        }
-
-        // println!("\nVel sum: {:?}", vel_sum);
-        // println!("Ray val: {ray_value}\n");
-
-        // note: This is undoing the conversion to the rectangle.
-        let sample_center = Vec3::new(
-            (self.end.x + self.start.x) / 2.,
-            (self.end.y + self.start.y) / 2.,
-            (self.end.z + self.start.z) / 2.,
-        );
-
-        // let mut shell_inner = None;
-        // let mut shell_outer = None;
-
-        let acc_shell = accel::calc_acc_shell(shells, sample_center, emitter_id, shell_c);
-
-        // todo: To calculate div and curl, we need multiple sets of rays.
-
-        SampleProperties {
-            ray_density: ray_value / volume,
-            ray_net_direction: ray_vel_sum.to_normalized() * -1.,
-            acc_shell,
-            div: 0.,
-            curl: 0.,
-        }
-    }
-}
-
-#[derive(Debug)]
-/// Our model "particle" that travels outward from a source
-struct GravRay {
-    /// A quick and dirty way to prevent a body from interacting with itself.
-    emitter_id: usize,
-    posit: Vec3,
-    /// The magnitude corresponds to source mass. Direction is outward
-    /// at any angle from the source.
-    vel: Vec3,
-    // todo: We can assume there is no acc on this, right?
-    /// We are currently applying a weight based on source mass; we could alternatively have more
-    /// massive objects output more rays. This method here is likely more computationally efficient.
-    src_mass: f64,
-}
-
 #[derive(Debug, Clone)]
 struct GravShell {
     emitter_id: usize,
@@ -360,88 +192,45 @@ struct GravShell {
     src_mass: f64,
 }
 
-impl GravShell {
-    /// Determine if the shell surface intersects a rectangular box.
-    pub fn intersects_rect(&self, rect: &SampleRect) -> bool {
-        // Iterate over all the vertices of the rectangular prism.
-        let box_vertices = [
-            Vec3::new(rect.start.x, rect.start.y, rect.start.z),
-            Vec3::new(rect.start.x, rect.start.y, rect.end.z),
-            Vec3::new(rect.start.x, rect.end.y, rect.start.z),
-            Vec3::new(rect.start.x, rect.end.y, rect.end.z),
-            Vec3::new(rect.end.x, rect.start.y, rect.start.z),
-            Vec3::new(rect.end.x, rect.start.y, rect.end.z),
-            Vec3::new(rect.end.x, rect.end.y, rect.start.z),
-            Vec3::new(rect.end.x, rect.end.y, rect.end.z),
-        ];
-
-        for vertex in &box_vertices {
-            let distance = (self.center.x - vertex.x).powi(2)
-                + (self.center.y - vertex.y).powi(2)
-                + (self.center.z - vertex.z).powi(2);
-
-            let radius_squared = self.radius.powi(2);
-
-            // Check if the distance to the vertex is exactly the radius.
-            if (distance - radius_squared).abs() < f64::EPSILON {
-                return true;
-            }
-        }
-
-        false
-    }
-}
-
-#[derive(Debug)]
-struct SampleProperties {
-    /// Is this an analog for V (potential) ?
-    ray_density: f64,
-    /// A unit vec, from the weighted average of ray velocities.
-    ray_net_direction: Vec3,
-    acc_shell: Vec3,
-    /// Divergence
-    div: f64,
-    curl: f64,
-}
-
 /// Entry point for computation; rename A/R.
 fn build(state: &mut State) {
     for t in 0..state.config.num_timesteps {
         // Create a new set of rays.
         if t % state.config.shell_creation_ratio == 0 {
             for (id, body) in state.bodies.iter().enumerate() {
-                // todo temp RM
-                for _ in 0..state.config.num_rays_per_iter {
-                    // state.rays.push(body.create_ray(id));
-                }
+                // for _ in 0..state.config.num_rays_per_iter {
+                // state.rays.push(body.create_ray(id));
+                // }
                 state.shells.push(body.create_shell(id));
             }
         }
 
-        for (i, body) in state.bodies.iter_mut().enumerate() {
-            // body.accel = accel::accel(
-            //     body,
-            //     &state.rays,
-            //     &state.shells,
-            //     i,
-            //     state.config.dt_integration,
-            // );
+        // for (i, body) in state.bodies.iter_mut().enumerate() {
+        // body.accel = accel::accel(
+        //     body,
+        //     &state.rays,
+        //     &state.shells,
+        //     i,
+        //     state.config.dt_integration,
+        // );
 
-            // body.accel = accel::acc_shells(
-            //     body,
-            //     &state.rays,
-            //     &state.shells,
-            //     i,
-            //     state.config.dt_integration,
-            //     state.config.gauss_c,
-            // );
+        // body.accel = accel::acc_shells(
+        //     body,
+        //     &state.rays,
+        //     &state.shells,
+        //     i,
+        //     state.config.dt_integration,
+        //     state.config.gauss_c,
+        // );
 
-            // body.accel = accel::calc_acc_shell(&state.shells, body.posit, i, state.config.gauss_c);
-        }
+        // body.accel = accel::calc_acc_shell(&state.shells, body.posit, i, state.config.gauss_c);
+        // }
 
         // Update ray propogation
         // integrate::integrate_rk4_ray(&mut state.rays, state.config.dt_integration);
+
         // state.remove_far_rays();
+        state.remove_far_shells();
 
         for shell in &mut state.shells {
             shell.radius += C * state.config.dt_integration;
@@ -463,10 +252,18 @@ fn build(state: &mut State) {
 
         for (id, body) in &mut state.bodies.iter_mut().enumerate() {
             body.accel = acc(id, body.posit);
+
+            // todo: Ideally, use distance.
+            if body.accel.magnitude() > 69. {
+                let dt = state.config.dt_integration / 2.;
+                // todo: Split time stamp.
+            }
         }
 
+        state.take_snapshot(t / SNAPSHOT_RATIO); // Initial snapshot; t=0.
+
         // Allow waves to propogate to reach a steady state, ideally.
-        if t > 1_000 {
+        if acc_inst || t > 1_000 {
             // Update body motion.
             integrate::integrate_rk4(
                 &mut state.bodies,
@@ -483,128 +280,17 @@ fn build(state: &mut State) {
         if t % SNAPSHOT_RATIO == 0 {
             state.take_snapshot(t / SNAPSHOT_RATIO);
         }
+        // println!("Shell ct: {:?}", state.shells.len());
     }
-}
-
-// todo: Move, i.e. to own module, A/R
-fn make_bodies(
-    n: usize,
-    posit_max_dist: f64,
-    mass_range: (f64, f64),
-    ω_range: (f64, f64),
-) -> Vec<Body> {
-    let mut rng = rand::thread_rng();
-    let mut result = Vec::with_capacity(n);
-
-    for _ in 0..n {
-        // Generate a random position within the maximum distance
-        // todo: QC this posit gen.
-        let r = rng.gen_range(0.0..posit_max_dist);
-        let theta = rng.gen_range(0.0..TAU);
-        let posit = Vec3::new(r * theta.cos(), r * theta.sin(), 0.0);
-
-        // Generate a random mass within the range
-        let mass = rng.gen_range(mass_range.0..mass_range.1);
-
-        // Generate a velocity with an angular velocity in the specified range
-        let ω = rng.gen_range(ω_range.0..ω_range.1);
-        let vel = Vec3::new(-ω * posit.y, ω * posit.x, 0.0);
-
-        // Create the body and add it to the result vector
-        result.push(Body {
-            posit,
-            vel,
-            accel: Vec3::new_zero(),
-            mass,
-        });
-    }
-
-    result
-}
-
-/// Create n bodies, in circular orbit, at equal distances from each other.
-fn make_bodies_balanced(num: usize, r: f64, mass_body: f64, mass_central: f64) -> Vec<Body> {
-    let mut result = Vec::with_capacity(num);
-
-    for i in 0..num {
-        let theta = TAU / num as f64 * i as f64;
-        let posit = Vec3::new(r * theta.cos(), r * theta.sin(), 0.0);
-
-        // Velocity magnitude for circular orbit
-        let v_mag = (mass_central / r).sqrt();
-
-        // Velocity direction: perpendicular to the radius vector
-        let v_x = -v_mag * theta.sin(); // Tangential velocity in x-direction
-        let v_y = v_mag * theta.cos(); // Tangential velocity in y-direction
-
-        let vel = Vec3::new(v_x, v_y, 0.0);
-
-        result.push(Body {
-            posit,
-            vel,
-            accel: Vec3::new_zero(),
-            mass: mass_body,
-        });
-    }
-
-    result
 }
 
 fn main() {
     println!("Building snapshots...");
     let mut state = State::default();
+    state.dt_dynamic = state.config.dt_integration; // todo: Integrate this into State::default();
 
-    let ω = TAU * 2.;
-
-    // state.bodies.extend_from_slice(&make_bodies(30, 10.,(0., 100.), (ω - 0.001, ω)));
-
-    // Inner heavy
-    // state.bodies.extend_from_slice(&make_bodies(1, 0.001,(300., 1_000.), (0.0, 0.0001)));
-    // state.bodies.push(Body {
-    //     posit: Vec3::new_zero(),
-    //     vel: Vec3::new_zero(),
-    //     accel: Vec3::new_zero(),
-    //     mass: 1_000.,
-    // });
-
-    let mass_central = 1_000.;
-    state.bodies = vec![Body {
-        posit: Vec3::new_zero(),
-        vel: Vec3::new_zero(),
-        accel: Vec3::new_zero(),
-        mass: mass_central,
-    }];
-    // todo: the central mass method here isn't correct, as it neglects the other masses.
-    state
-        .bodies
-        .extend_from_slice(&make_bodies_balanced(3, 2., 10., mass_central));
-    state
-        .bodies
-        .extend_from_slice(&make_bodies_balanced(3, 5., 10., mass_central));
-    state
-        .bodies
-        .extend_from_slice(&make_bodies_balanced(2, 10., 10., mass_central));
-
-    println!("Bodies: {:?}", state.bodies);
-
-    // state.bodies = vec![
-    //     Body {
-    //         posit: Vec3::new_zero(),
-    //         // vel: Vec3::new_zero(),
-    //         vel: Vec3::new(0.0, -1., 0.),
-    //         accel: Vec3::new_zero(),
-    //         // mass: 100.,
-    //         mass: 10.,
-    //     },
-    //     Body {
-    //         posit: Vec3::new(2., 0., 0.),
-    //         vel: Vec3::new(0.0, 1., 0.),
-    //         accel: Vec3::new_zero(),
-    //         // mass: 0.0001,
-    //         mass: 10.,
-    //     },
-    // ];
-
+    state.bodies = body_creation::make_galaxy_coarse(4, 6);
+    // state.bodies = body_creation::make_galaxy_coarse(10, 8);
     state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
     build(&mut state);

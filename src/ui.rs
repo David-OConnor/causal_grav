@@ -3,9 +3,6 @@ use graphics::{EngineUpdates, Scene};
 
 use crate::{playback::change_snapshot, State};
 
-const SLIDER_WIDTH: f32 = 460.;
-const SLIDER_WIDTH_ORIENTATION: f32 = 100.;
-
 pub const ROW_SPACING: f32 = 22.;
 pub const COL_SPACING: f32 = 30.;
 
@@ -15,7 +12,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
     let mut engine_updates = EngineUpdates::default();
 
     TopBottomPanel::top("0").show(ctx, |ui| {
-        ui.spacing_mut().slider_width = SLIDER_WIDTH;
+        ui.spacing_mut().slider_width = ui.available_width() - 200.;
 
         ui.horizontal(|ui| {
             ui.add_space(COL_SPACING);
