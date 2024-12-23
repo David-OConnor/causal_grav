@@ -24,13 +24,13 @@ use crate::{
 //     properties.acc_shell
 // }
 
-pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, emitter_id: usize, shell_c: f64) -> Vec3 {
+pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, id_acted_on: usize, shell_c: f64) -> Vec3 {
     let mut result = Vec3::new_zero();
 
     // todo: Once you have more than one body acting on a target, you need to change this, so you get
     // todo exactly 0 or 1 shells per other body.
     for shell in shells {
-        if shell.emitter_id == emitter_id {
+        if shell.emitter_id == id_acted_on {
             continue;
         }
 
@@ -52,11 +52,11 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, emitter_id: usize, shel
 }
 
 /// An instantaneous-accel control.
-pub fn calc_acc_inst(posit: Vec3, bodies_other: &[Body], emitter_id: usize) -> Vec3 {
+pub fn calc_acc_inst(posit: Vec3, bodies_other: &[Body], id_acted_on: usize) -> Vec3 {
     let mut result = Vec3::new_zero();
 
     for (i, body_src) in bodies_other.iter().enumerate() {
-        if i == emitter_id {
+        if i == id_acted_on {
             continue; // self-interaction.
         }
 

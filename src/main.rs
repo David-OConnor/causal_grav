@@ -9,7 +9,6 @@ use crate::{
     playback::{vec_to_f32, SnapShot},
     render::render,
 };
-// Add this to use the random number generator
 
 mod accel;
 mod body_creation;
@@ -92,9 +91,9 @@ struct State {
     snapshots: Vec<SnapShot>,
     /// For rendering; separate from snapshots since it's invariant.
     body_masses: Vec<f32>,
-    /// Defaults to `Config::dt_integration`, but becomes more precise when
-    /// bodies are close.
-    dt_dynamic: f64,
+    // /// Defaults to `Config::dt_integration`, but becomes more precise when
+    // /// bodies are close. This is a global DT, vice local only for those bodies.
+    // dt_dynamic: f64,
 }
 
 impl State {
@@ -250,14 +249,32 @@ fn build(state: &mut State) {
             }
         };
 
+        // Calculate dt for this step, based on the closest/fastest rel velocity.
+        // This affects motion integration only; not shell creation.
+        // todo: Separate fn
+        let mut dt_min = state.config.dt_integration;
+        // todo: Consider cacheing the distances, so this second iteration can be reused.
+        for (id_acted_on, body) in &mut state.bodies.iter_mut().enumerate() {
+            for (i, body_src) in bodies_other.iter().enumerate() {
+                if i == id_acted_on {
+                    continue; // self-interaction.
+                }
+
+                let dist = (body_src.posit - body.posit).magnitude();
+                let rel_velocity = (body_src.vel - body.vel).magnitude();
+                const DT_FACTOR: f64 = 0.01; // todo
+                let dt = DT_FACTOR * dist / rel_velocity;
+                if dt < dt_min {
+                    dt_min = dt;
+                }
+            }
+        }
+        if dt_min < state.config.dt_integration - f64::EPSILON {
+            println!("DT MIN: {:?}", dt_min);
+        }
+
         for (id, body) in &mut state.bodies.iter_mut().enumerate() {
             body.accel = acc(id, body.posit);
-
-            // todo: Ideally, use distance.
-            if body.accel.magnitude() > 69. {
-                let dt = state.config.dt_integration / 2.;
-                // todo: Split time stamp.
-            }
         }
 
         state.take_snapshot(t / SNAPSHOT_RATIO); // Initial snapshot; t=0.
@@ -268,7 +285,7 @@ fn build(state: &mut State) {
             integrate::integrate_rk4(
                 &mut state.bodies,
                 &state.shells,
-                state.config.dt_integration,
+                dt_min,
                 state.config.gauss_c,
                 acc_inst,
             );
@@ -287,7 +304,7 @@ fn build(state: &mut State) {
 fn main() {
     println!("Building snapshots...");
     let mut state = State::default();
-    state.dt_dynamic = state.config.dt_integration; // todo: Integrate this into State::default();
+    // state.dt_dynamic = state.config.dt_integration; // todo: Integrate this into State::default();
 
     state.bodies = body_creation::make_galaxy_coarse(4, 6);
     // state.bodies = body_creation::make_galaxy_coarse(10, 8);
