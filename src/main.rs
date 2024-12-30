@@ -52,7 +52,9 @@ const C: f64 = 40.;
 
 pub struct Config {
     num_timesteps: usize,
-    dt_integration: f64,
+    dt_integration_max: f64,
+    /// Lower values here lead to higher precision.
+    dynamic_dt_scaler: f64,
     shell_creation_ratio: usize,
     // num_rays_per_iter: usize,
     gauss_c: f64,
@@ -60,16 +62,17 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        let dt_integration = 0.001;
+        let dt_integration_max = 0.01;
         let shell_creation_ratio = 6;
 
         // In distance: t * d/t = d.
-        let shell_spacing = dt_integration * shell_creation_ratio as f64 * C;
+        let shell_spacing = dt_integration_max * shell_creation_ratio as f64 * C;
 
         Self {
-            num_timesteps: 15_000,
+            num_timesteps: 100_000,
             shell_creation_ratio,
-            dt_integration,
+            dt_integration_max,
+            dynamic_dt_scaler: 0.01,
             // num_rays_per_iter: 200,
             gauss_c: shell_spacing * COEFF_C,
         }
@@ -101,7 +104,7 @@ impl State {
         self.shells.retain(|shell| shell.radius <= MAX_SHELL_R);
     }
 
-    fn take_snapshot(&mut self, time: usize) {
+    fn take_snapshot(&mut self, time: usize, dt: f64) {
         self.snapshots.push(SnapShot {
             time,
             body_posits: self.bodies.iter().map(|b| vec_to_f32(b.posit)).collect(),
@@ -122,6 +125,7 @@ impl State {
             //     })
             //     .collect(),
             // shells: self.shells.clone(),
+            dt: dt as f32,
         })
     }
 }
@@ -232,7 +236,7 @@ fn build(state: &mut State) {
         state.remove_far_shells();
 
         for shell in &mut state.shells {
-            shell.radius += C * state.config.dt_integration;
+            shell.radius += C * state.config.dt_integration_max;
         }
 
         let acc_inst = true;
@@ -252,7 +256,7 @@ fn build(state: &mut State) {
         // Calculate dt for this step, based on the closest/fastest rel velocity.
         // This affects motion integration only; not shell creation.
         // todo: Separate fn
-        let mut dt_min = state.config.dt_integration;
+        let mut dt_min = state.config.dt_integration_max;
         // todo: Consider cacheing the distances, so this second iteration can be reused.
         for (id_acted_on, body) in &mut state.bodies.iter_mut().enumerate() {
             for (i, body_src) in bodies_other.iter().enumerate() {
@@ -262,22 +266,21 @@ fn build(state: &mut State) {
 
                 let dist = (body_src.posit - body.posit).magnitude();
                 let rel_velocity = (body_src.vel - body.vel).magnitude();
-                const DT_FACTOR: f64 = 0.01; // todo
-                let dt = DT_FACTOR * dist / rel_velocity;
+                let dt = state.config.dynamic_dt_scaler * dist / rel_velocity;
                 if dt < dt_min {
                     dt_min = dt;
                 }
             }
         }
-        if dt_min < state.config.dt_integration - f64::EPSILON {
-            println!("DT MIN: {:?}", dt_min);
-        }
+        // if dt_min < state.config.dt_integration - f64::EPSILON {
+        //     println!("DT MIN: {:?}", dt_min);
+        // }
 
         for (id, body) in &mut state.bodies.iter_mut().enumerate() {
             body.accel = acc(id, body.posit);
         }
 
-        state.take_snapshot(t / SNAPSHOT_RATIO); // Initial snapshot; t=0.
+        state.take_snapshot(t / SNAPSHOT_RATIO, dt_min); // Initial snapshot; t=0.
 
         // Allow waves to propogate to reach a steady state, ideally.
         if acc_inst || t > 1_000 {
@@ -295,7 +298,7 @@ fn build(state: &mut State) {
         // Note: This can use a substantial amount of memory.
 
         if t % SNAPSHOT_RATIO == 0 {
-            state.take_snapshot(t / SNAPSHOT_RATIO);
+            state.take_snapshot(t / SNAPSHOT_RATIO, dt_min);
         }
         // println!("Shell ct: {:?}", state.shells.len());
     }
@@ -306,8 +309,8 @@ fn main() {
     let mut state = State::default();
     // state.dt_dynamic = state.config.dt_integration; // todo: Integrate this into State::default();
 
-    state.bodies = body_creation::make_galaxy_coarse(4, 6);
-    // state.bodies = body_creation::make_galaxy_coarse(10, 8);
+    // state.bodies = body_creation::make_galaxy_coarse(4, 6);
+    state.bodies = body_creation::make_galaxy_coarse(8, 4);
     state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
     build(&mut state);

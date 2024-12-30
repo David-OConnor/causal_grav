@@ -30,6 +30,21 @@ Thought, re inst acc vs causal:
 vice the naive n-body simulation, as each angular area is interchangeable. Would masses migrating radially change this?
 
 
+GR effect to look into:
+ - Lense-Thirring precession
+ - Gravitomagnetism
+ - Gerson Otto Ludwig's 2021 paper on this https://inspirehep.net/files/8d6f28c11efc8a0bb57121ab804da1a1
+ - Frame-dragging
+ - Cooperstock, Tieu: GR Resolves Galactic Rotation Without...: https://arxiv.org/abs/astro-ph/0507619
+ - Another paper, from an amateur(?): https://arxiv.org/pdf/1503.07440
+ - Perhaps: "weak field GR"
+ - Look into the Bullet Cluster, in addition to rotation curves.
+ - Mass currents
+
+Short summary of Ludwig's paper: https://scottlocklin.wordpress.com/2021/03/12/humble-tokamak-physicist-owns-generations-of-cosmological-wankers/
+
+Note: It's not clear why galaxies have this central bubble, then flat spiral structure; vague points to angular momentum aren't sufficient. 
+
 
 ## Wide binaries
 

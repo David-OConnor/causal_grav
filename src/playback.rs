@@ -23,6 +23,7 @@ pub struct SnapShot {
     // pub rays: Vec<(Vec3f32, usize)>,
     // todo: Compact form for shells, as above?
     // pub shells: Vec<GravShell>,
+    pub dt: f32,
 }
 
 pub fn vec_to_f32(v: Vec3) -> Vec3f32 {

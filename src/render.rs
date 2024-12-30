@@ -19,7 +19,7 @@ const BACKGROUND_COLOR: Color = (0.5, 0.5, 0.5);
 
 const RENDER_DIST: f32 = 200.;
 
-pub const BODY_SIZE: f32 = 0.01; // Note: We scale by mass as well.
+pub const BODY_SIZE: f32 = 0.02; // Note: We scale by mass as well.
 pub const BODY_SHINYNESS: f32 = 2.;
 pub const BODY_COLOR: Color = (1.0, 0.2, 0.2);
 
@@ -46,7 +46,7 @@ pub fn render(state: State) {
         entities: Vec::new(), // updated below.
         camera: Camera {
             fov_y: TAU / 8.,
-            position: Vec3::new(0., 10., -20.),
+            position: Vec3::new(0., 10., -60.),
             far: RENDER_DIST,
             near: 0.2, // todo: Adjust A/R
             orientation: Quaternion::from_axis_angle(Vec3::new(1., 0., 0.), TAU / 16.),

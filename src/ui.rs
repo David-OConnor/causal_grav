@@ -12,11 +12,11 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
     let mut engine_updates = EngineUpdates::default();
 
     TopBottomPanel::top("0").show(ctx, |ui| {
-        ui.spacing_mut().slider_width = ui.available_width() - 200.;
+        ui.spacing_mut().slider_width = ui.available_width() - 220.;
 
         ui.horizontal(|ui| {
             ui.add_space(COL_SPACING);
-            ui.label("Time:");
+            ui.label("Snap:");
 
             let snapshot_prev = state.ui.snapshot_selected;
             ui.add(Slider::new(
@@ -33,6 +33,12 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
                 engine_updates.entities = true;
             }
+
+            ui.add_space(COL_SPACING);
+            ui.label(format!(
+                "dt: {:.6}",
+                &state.snapshots[state.ui.snapshot_selected].dt
+            ));
         });
 
         ui.add_space(ROW_SPACING / 2.);

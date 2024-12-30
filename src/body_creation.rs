@@ -47,8 +47,8 @@ pub fn make_galaxy_coarse(num_bands: usize, bodies_per_band: usize) -> Vec<Body>
 
     // todo: Pass as params etc.
 
-    let dist_spacing = 2.;
-    let mass = 20.;
+    let dist_spacing = 2.5;
+    let mass = 6.;
 
     for i in 1..num_bands {
         let r = dist_spacing * i as f64;
@@ -60,7 +60,10 @@ pub fn make_galaxy_coarse(num_bands: usize, bodies_per_band: usize) -> Vec<Body>
         // todo: the central mass method here isn't correct, as it neglects the other masses.
         // todo: (Used to circularize orbits)
 
-        let mass_central_adj = mass_central + (i - 1) as f64 * mass * bodies_per_band as f64;
+        let mut mass_central_adj = mass_central + (i - 1) as f64 * mass * bodies_per_band as f64
+            - (num_bands - (i - 1)) as f64 * mass * bodies_per_band as f64;
+
+        // mass_central_adj *= 2.0;
 
         result.extend_from_slice(&make_bodies_balanced(
             bodies_per_band,

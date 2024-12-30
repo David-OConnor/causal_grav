@@ -9,14 +9,14 @@ from matplotlib import pyplot as plt
 
 NUM_X = int(1e4)
 # Range to plot
-X_RANGE = (0., 12.)
+X_RANGE = (0.0, 12.0)
 
-GAUSS_START = 2.
+GAUSS_START = 2.0
 GAUSS_SPACING = 0.4
 
 NUM_GAUS = 8
 
-A = 1.
+A = 1.0
 C_COEFF = 0.6
 # C_COEFF = 0.55
 C = GAUSS_SPACING * C_COEFF
@@ -26,9 +26,10 @@ C = GAUSS_SPACING * C_COEFF
 AMP_SCALER = 0.6649  # for coeff = 0.6
 # AMP_SCALER = 0.7253 # for coeff = 0.55
 
+
 def gauss(ctr: float, a: float, c: float, posit_eval: float) -> float:
     x = posit_eval - ctr
-    return a * np.exp(-(x ** 2) / (2. * c ** 2))
+    return a * np.exp(-(x**2) / (2.0 * c**2))
 
 
 def main():
@@ -37,7 +38,9 @@ def main():
     result = np.zeros(NUM_X)
 
     # Generate evenly spaced Gaussian centers
-    gauss_centers = np.linspace(GAUSS_START, GAUSS_START + GAUSS_SPACING * (NUM_GAUS - 1), NUM_GAUS)
+    gauss_centers = np.linspace(
+        GAUSS_START, GAUSS_START + GAUSS_SPACING * (NUM_GAUS - 1), NUM_GAUS
+    )
 
     # Sum up the gaussians
     for gauss_ctr in gauss_centers:
