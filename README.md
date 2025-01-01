@@ -40,11 +40,17 @@ GR effect to look into:
  - Perhaps: "weak field GR"
  - Look into the Bullet Cluster, in addition to rotation curves.
  - Mass currents
+ - Another paper from 2021 on Gravitoelectromagnetism: https://arxiv.org/pdf/2109.00357
+
+
+Another possibility: Self-interactions of the gravity field, and similar
+
 
 Short summary of Ludwig's paper: https://scottlocklin.wordpress.com/2021/03/12/humble-tokamak-physicist-owns-generations-of-cosmological-wankers/
 
 Note: It's not clear why galaxies have this central bubble, then flat spiral structure; vague points to angular momentum aren't sufficient. 
 
+note: We likely will use the weak field approximation of GR?
 
 ## Wide binaries
 

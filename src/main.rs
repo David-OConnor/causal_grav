@@ -310,7 +310,7 @@ fn main() {
     // state.dt_dynamic = state.config.dt_integration; // todo: Integrate this into State::default();
 
     // state.bodies = body_creation::make_galaxy_coarse(4, 6);
-    state.bodies = body_creation::make_galaxy_coarse(8, 4);
+    state.bodies = body_creation::make_galaxy_coarse(8, 4, 20);
     state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
     build(&mut state);

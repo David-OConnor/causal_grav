@@ -35,20 +35,27 @@ pub fn make_bodies_balanced(num: usize, r: f64, mass_body: f64, mass_central: f6
     result
 }
 
-pub fn make_galaxy_coarse(num_bands: usize, bodies_per_band: usize) -> Vec<Body> {
+pub fn make_galaxy_coarse(num_bands: usize, bodies_per_band: usize, bodies_bulge: usize) -> Vec<Body> {
     let mass_central = 1_000.;
 
-    let mut result = vec![Body {
+    let n_bodies_spiral = (num_bands - 1) * bodies_per_band + 1;
+    let mut result = Vec::with_capacity(n_bodies_spiral + bodies_bulge);
+
+    // A central mass
+    result.push(Body {
         posit: Vec3::new_zero(),
         vel: Vec3::new_zero(),
         accel: Vec3::new_zero(),
         mass: mass_central,
-    }];
-
-    // todo: Pass as params etc.
+    });
 
     let dist_spacing = 2.5;
     let mass = 6.;
+
+    // The bulge
+    result.extend(make_halo_bulge(4., bodies_bulge, mass));
+
+    // todo: Pass as params etc.
 
     for i in 1..num_bands {
         let r = dist_spacing * i as f64;
@@ -77,6 +84,32 @@ pub fn make_galaxy_coarse(num_bands: usize, bodies_per_band: usize) -> Vec<Body>
         // result
         //     .extend_from_slice(&make_bodies_balanced(3, 10., 10., mass_central));
     }
+    result
+}
+
+/// Make a halo of dark matter, or a galaxy's central bulge
+pub fn make_halo_bulge(radius: f64, n_bodies: usize, mass: f64) -> Vec<Body> {
+    let mut result = Vec::with_capacity(n_bodies);
+    let mut rng = rand::thread_rng();
+
+    for _ in 0..n_bodies {
+        let r = radius * rng.gen::<f64>().cbrt();  // Random radius scaled within [0, distribution_radius]
+        let theta = rng.gen_range(0.0..TAU); // Random angle theta in [0, 2*pi]
+        let phi = rng.gen_range(0.0..TAU/2.); // Random angle phi in [0, pi]
+
+        // Convert spherical coordinates to Cartesian coordinates
+        let x = r * phi.sin() * theta.cos();
+        let y = r * phi.sin() * theta.sin();
+        let z = r * phi.cos();
+
+        result.push(Body {
+            posit: Vec3::new(x, y, z),
+            vel: Vec3::new_zero(), // todo A/R
+            accel: Vec3::new_zero(),
+            mass,
+        });
+    }
+    
     result
 }
 
