@@ -1,6 +1,8 @@
 # Causal gravity
 
 
+Note: You may need to reproduce luminosity profiles, as well as rotation curves.
+
 Gravitomagnetism
 Frame drag
 Lense-Tillman (sp?)
@@ -70,6 +72,11 @@ It comes down to this: We have results demonstrating that rotation curves match 
 https://www.smbc-comics.com/comic/how-math-works
 
 
+## Model galaxies
+- Bullet cluster
+- NGC 1560
+
+
 ## Testable predictions
 
 
@@ -79,3 +86,4 @@ https://www.smbc-comics.com/comic/how-math-works
  - https://arxiv.org/pdf/1503.07440
  - https://arxiv.org/abs/astro-ph/0507619
  - https://arxiv.org/pdf/2109.00357 (?)
+ -  todo: Paper on lagged newtonian models cancelling velocity-dependent terms

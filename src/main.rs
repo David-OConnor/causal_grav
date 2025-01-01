@@ -1,20 +1,24 @@
 #![allow(non_snake_case)]
 #![allow(non_ascii_idents)]
 
+use std::path::PathBuf;
+
 use lin_alg::f64::Vec3;
 use rand::Rng;
 
 use crate::{
     gaussian::{COEFF_C, MAX_SHELL_R},
-    playback::{vec_to_f32, SnapShot},
+    playback::{save, vec_to_f32, SnapShot, DEFAULT_SNAPSHOT_FILE},
     render::render,
 };
 
 mod accel;
 mod body_creation;
+mod fluid_dynamics;
 mod gaussian;
 mod integrate;
 mod playback;
+mod properties;
 mod render;
 mod ui;
 // Shower thought, from looking at this from a first person view: View things from the body's perspective.
@@ -69,7 +73,8 @@ impl Default for Config {
         let shell_spacing = dt_integration_max * shell_creation_ratio as f64 * C;
 
         Self {
-            num_timesteps: 100_000,
+            // num_timesteps: 1_000_000,
+            num_timesteps: 20_000,
             shell_creation_ratio,
             dt_integration_max,
             dynamic_dt_scaler: 0.01,
@@ -310,12 +315,24 @@ fn main() {
     // state.dt_dynamic = state.config.dt_integration; // todo: Integrate this into State::default();
 
     // state.bodies = body_creation::make_galaxy_coarse(4, 6);
-    state.bodies = body_creation::make_galaxy_coarse(8, 4, 20);
+    state.bodies = body_creation::make_galaxy_coarse(9, 4, 20);
     state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
     build(&mut state);
 
+    let rotation_curve = properties::rotation_curve(&state.bodies, Vec3::new_zero(), C);
+
+    for pt in &rotation_curve {
+        println!("Rot pt: {:?}", pt);
+    }
+
+    properties::plot_rotation_curve(&rotation_curve, "test");
+
     println!("Complete. Rendering.");
+
+    if let Err(e) = save(&PathBuf::from(DEFAULT_SNAPSHOT_FILE), &state.snapshots) {
+        eprintln!("Error saving snapshots: {e}");
+    }
 
     render(state);
 }

@@ -1,0 +1,137 @@
+//! Get the properties of collections of bodies, e.g. galaxies
+
+// todo: Output types A/R. Currently x/y tuples.
+
+const N_SAMPLE_PTS: usize = 40;
+
+use lin_alg::f64::Vec3;
+use plotters::{
+    element::PathElement,
+    prelude::{BitMapBackend, ChartBuilder, Color, IntoDrawingArea, BLACK, BLUE, WHITE},
+    series::LineSeries,
+};
+
+use crate::Body;
+
+/// Normalized mass density. X: r (kpc). Y: ρ/ρ_0
+pub fn mass_density(bodies: &[Body]) -> Vec<(f64, f64)> {
+    let mut result = Vec::with_capacity(N_SAMPLE_PTS);
+
+    result
+}
+
+/// Luminosity profile. X: α (arcsec). Y: μ (mag arcsec^-2)
+pub fn luminosity(bodies: &[Body]) -> Vec<(f64, f64)> {
+    let mut result = Vec::with_capacity(N_SAMPLE_PTS);
+
+    result
+}
+
+/// Normalized rotation curve. X: r (kpc). Y: V/c
+pub fn rotation_curve(bodies: &[Body], center: Vec3, c: f64) -> Vec<(f64, f64)> {
+    let mut result = Vec::with_capacity(N_SAMPLE_PTS);
+
+    // note: You could hard-code range_max for performance reasons.
+    let mut r_max = 0.;
+    for body in bodies {
+        let r = (body.posit - center).magnitude();
+        if r > r_max {
+            r_max = r;
+        }
+    }
+    let dr = r_max / N_SAMPLE_PTS as f64;
+
+    for i in 0..N_SAMPLE_PTS {
+        let r = i as f64 * dr;
+
+        // Todo: Consider a fuzzy, weighted dropoff instead of these hard boundaries. Or not;
+        // todo: Maybe this is fine.
+        let nearby_pts: Vec<_> = bodies
+            .into_iter()
+            .filter(|b| ((b.posit - center).magnitude() - r).abs() <= dr / 2.)
+            .map(|b2| b2.posit)
+            .collect();
+
+        if nearby_pts.is_empty() {
+            result.push((r, 0.));
+        } else {
+            let mut v = 0.;
+            for pt in &nearby_pts {
+                v += pt.magnitude();
+            }
+            result.push((r, v / (nearby_pts.len() as f64 * c)));
+        }
+    }
+
+    result
+}
+
+/// Sersic index. X: α. Y: s.
+pub fn sersic(bodies: &[Body]) -> Vec<(f64, f64)> {
+    let mut result = Vec::with_capacity(N_SAMPLE_PTS);
+
+    result
+}
+
+/// Display a 2d plot of properties, e.g. rotation curve, luminosity etc.
+pub fn plot(data: &[(f64, f64)], x_label: &str, y_label: &str, plot_title: &str) {
+    // Find the x and y ranges using PartialOrd
+    let x_range = data
+        .iter()
+        .map(|(x, _)| *x)
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), x| {
+            (min.min(x), max.max(x))
+        });
+
+    let y_range = data
+        .iter()
+        .map(|(_, y)| *y)
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), y| {
+            (min.min(y), max.max(y))
+        });
+
+    // Create a drawing area for the plot
+    let root = BitMapBackend::new("output.png", (800, 600)).into_drawing_area();
+    root.fill(&WHITE).unwrap();
+
+    // Create a chart builder
+    let mut chart = ChartBuilder::on(&root)
+        .caption(plot_title, ("sans-serif", 20))
+        .margin(10)
+        .x_label_area_size(30)
+        .y_label_area_size(30)
+        .build_cartesian_2d(x_range.0..x_range.1, y_range.0..y_range.1)
+        .unwrap();
+
+    // Set labels
+    chart
+        .configure_mesh()
+        .x_desc(x_label)
+        .y_desc(y_label)
+        .draw()
+        .unwrap();
+
+    // Plot the data points
+    chart
+        .draw_series(LineSeries::new(data.iter().cloned(), &BLUE)) // Use `.cloned()` here
+        .unwrap()
+        .label("Data")
+        .legend(|(x, y)| PathElement::new([(x, y), (x + 20, y)], &BLUE));
+
+    // Draw the legend
+    chart
+        .configure_series_labels()
+        .background_style(&WHITE.mix(0.8))
+        .border_style(&BLACK)
+        .draw()
+        .unwrap();
+}
+
+pub fn plot_rotation_curve(data: &[(f64, f64)], desc: &str) {
+    plot(
+        data,
+        "r (kpc)",
+        "v / c",
+        &format!("Normalized rotation curve for {desc}"),
+    );
+}

@@ -1,1 +1,6 @@
 /target
+
+# Snapshots
+*.cg
+# Plots
+*.png

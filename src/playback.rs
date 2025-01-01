@@ -1,15 +1,37 @@
 //! Code related to the playback of computed snapshots.
 //!
 
+use std::{
+    fs::File,
+    io,
+    io::{ErrorKind, Read, Write},
+    path::Path,
+};
+
+use bincode::{
+    config,
+    error::{DecodeError, EncodeError},
+    Decode, Encode,
+};
 use graphics::Entity;
 use lin_alg::{
-    f32::{Quaternion, Vec3 as Vec3f32},
+    f32::{Quaternion, Vec3 as Vec3f32_b},
     f64::Vec3,
 };
 
 use crate::render::{BODY_COLOR, BODY_SHINYNESS, BODY_SIZE};
 
-#[derive(Debug)]
+pub const DEFAULT_SNAPSHOT_FILE: &str = "snapshot.cg";
+
+/// We use a custom type, vice from lin_alg, so we can impl Encode and Decode.
+#[derive(Clone, Copy, Debug, Encode, Decode)]
+pub struct Vec3f32 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+#[derive(Debug, Encode, Decode)]
 pub struct SnapShot {
     pub time: usize,
     // To save memory, we store the snapshots as f32; we only need f64 precision
@@ -27,7 +49,11 @@ pub struct SnapShot {
 }
 
 pub fn vec_to_f32(v: Vec3) -> Vec3f32 {
-    Vec3f32::new(v.x as f32, v.y as f32, v.z as f32)
+    Vec3f32 {
+        x: v.x as f32,
+        y: v.y as f32,
+        z: v.z as f32,
+    }
 }
 
 /// Body masses are separate from the snapshot, since it's invariant.
@@ -35,10 +61,11 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
     // *entities = Vec::with_capacity(entities.len() + snapshot.rays.len());
     *entities = Vec::with_capacity(entities.len());
 
-    for (i, body_posit) in snapshot.body_posits.iter().enumerate() {
+    for (i, body_posit_) in snapshot.body_posits.iter().enumerate() {
+        let body_posit = Vec3f32_b::new(body_posit_.x, body_posit_.y, body_posit_.z);
         entities.push(Entity::new(
             0,
-            *body_posit,
+            body_posit,
             Quaternion::new_identity(),
             // todo: Set up body masses.
             f32::min(BODY_SIZE * body_masses[i], 0.7),
@@ -73,4 +100,32 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
     // entity.opacity = 0.; // todo temp
     // entities.push(entity);
     // }
+}
+
+/// Save to file, using Bincode.
+pub fn save<T: Encode>(path: &Path, data: &T) -> io::Result<()> {
+    let config = config::standard();
+
+    let encoded: Vec<u8> = bincode::encode_to_vec(data, config).unwrap();
+
+    let mut file = File::create(path)?;
+    file.write_all(&encoded)?;
+    Ok(())
+}
+
+/// Load from file, using Bincode.
+pub fn load<T: Decode>(path: &Path) -> io::Result<T> {
+    let config = config::standard();
+
+    let mut file = File::open(path)?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)?;
+    let (decoded, _len) = match bincode::decode_from_slice(&buffer, config) {
+        Ok(v) => v,
+        Err(_) => {
+            eprintln!("Error loading from file. Did the format change?");
+            return Err(io::Error::new(ErrorKind::Other, "error loading"));
+        }
+    };
+    Ok(decoded)
 }
