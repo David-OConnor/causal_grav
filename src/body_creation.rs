@@ -5,22 +5,25 @@ use std::f64::consts::TAU;
 use lin_alg::f64::Vec3;
 use rand::Rng;
 
-use crate::Body;
+use crate::{
+    util::{interpolate, linspace},
+    Body, C,
+};
 
 /// Create n bodies, in circular orbit, at equal distances from each other.
 pub fn make_bodies_balanced(num: usize, r: f64, mass_body: f64, mass_central: f64) -> Vec<Body> {
     let mut result = Vec::with_capacity(num);
 
     for i in 0..num {
-        let theta = TAU / num as f64 * i as f64;
-        let posit = Vec3::new(r * theta.cos(), r * theta.sin(), 0.0);
+        let θ = TAU / num as f64 * i as f64;
+        let posit = Vec3::new(r * θ.cos(), r * θ.sin(), 0.0);
 
         // Velocity magnitude for circular orbit
         let v_mag = (mass_central / r).sqrt();
 
         // Velocity direction: perpendicular to the radius vector
-        let v_x = -v_mag * theta.sin(); // Tangential velocity in x-direction
-        let v_y = v_mag * theta.cos(); // Tangential velocity in y-direction
+        let v_x = -v_mag * θ.sin(); // Tangential velocity in x-direction
+        let v_y = v_mag * θ.cos(); // Tangential velocity in y-direction
 
         let vel = Vec3::new(v_x, v_y, 0.0);
 
@@ -98,13 +101,13 @@ pub fn make_halo_bulge(radius: f64, n_bodies: usize, mass: f64) -> Vec<Body> {
 
     for _ in 0..n_bodies {
         let r = radius * rng.gen::<f64>().cbrt(); // Random radius scaled within [0, distribution_radius]
-        let theta = rng.gen_range(0.0..TAU); // Random angle theta in [0, 2*pi]
-        let phi = rng.gen_range(0.0..TAU / 2.); // Random angle phi in [0, pi]
+        let θ = rng.gen_range(0.0..TAU); // Random angle θ in [0, 2*pi]
+        let ϕ = rng.gen_range(0.0..TAU / 2.); // Random angle phi in [0, pi]
 
         // Convert spherical coordinates to Cartesian coordinates
-        let x = r * phi.sin() * theta.cos();
-        let y = r * phi.sin() * theta.sin();
-        let z = r * phi.cos();
+        let x = r * ϕ.sin() * θ.cos();
+        let y = r * ϕ.sin() * θ.sin();
+        let z = r * ϕ.cos();
 
         result.push(Body {
             posit: Vec3::new(x, y, z),
@@ -117,38 +120,180 @@ pub fn make_halo_bulge(radius: f64, n_bodies: usize, mass: f64) -> Vec<Body> {
     result
 }
 
-// todo: Unused
-fn _make_bodies(
-    n: usize,
-    posit_max_dist: f64,
-    mass_range: (f64, f64),
-    ω_range: (f64, f64),
-) -> Vec<Body> {
-    let mut rng = rand::thread_rng();
-    let mut result = Vec::with_capacity(n);
+#[derive(Clone, Copy, PartialEq)]
+pub enum GalaxyShape {
+    GrandDesignSpiral,
+    FlocculentSpiral,
+    MultiArmSpiral,
+    BarredSpiral,
+    Lenticular,
+    Elliptical,
+}
 
-    for _ in 0..n {
-        // Generate a random position within the maximum distance
-        // todo: QC this posit gen.
-        let r = rng.gen_range(0.0..posit_max_dist);
-        let theta = rng.gen_range(0.0..TAU);
-        let posit = Vec3::new(r * theta.cos(), r * theta.sin(), 0.0);
+/// todo: We assume a spiral galaxy for now
+pub struct GalaxyDescrip {
+    pub shape: GalaxyShape,
+    /// See `properties` for what these units are
+    pub mass_density: Vec<(f64, f64)>,
+    /// r (kpc), v/c
+    pub rotation_curve: Vec<(f64, f64)>,
+    /// alpha (arcsec), mu (mac arcsec^-2)
+    pub luminosity: Vec<(f64, f64)>,
+    // todo: More A/R
+    pub eccentricity: f64,
+    pub arm_count: usize,
+}
 
-        // Generate a random mass within the range
-        let mass = rng.gen_range(mass_range.0..mass_range.1);
+impl GalaxyDescrip {
+    /// See the `properties` module for info on distributions
+    /// todo: Luminosity A/R
+    pub fn make_bodies(&self) -> Vec<Body> {
+        let mut result = Vec::with_capacity(69); // todo
+        let mut rng = rand::thread_rng();
 
-        // Generate a velocity with an angular velocity in the specified range
-        let ω = rng.gen_range(ω_range.0..ω_range.1);
-        let vel = Vec3::new(-ω * posit.y, ω * posit.x, 0.0);
+        // todo: eccentricity.
+        // todo: Event along rings instead of random?
 
-        // Create the body and add it to the result vector
-        result.push(Body {
-            posit,
-            vel,
-            accel: Vec3::new_zero(),
-            mass,
-        });
+        // Note: Our distributions tend to be heavily biased towards low r, so if we extend
+        // all the way to the end, we will likely leave out lots of values there.
+
+        let num_rings = 10;
+        let rs = linspace(0., self.mass_density.last().unwrap().0, num_rings);
+
+        // todo: Split into disc + bulge, among other things.
+        for r in rs {
+            // todo: Most of this is a hack.
+
+            let rho = interpolate(&self.mass_density, r).unwrap();
+            let circum = TAU * r;
+            let bodies_this_r = (10. * rho * circum) as usize;
+
+            // Multiply by C, because the curve is normalized to C.
+            // todo: The fudge factor...
+            let v_mag = 1_500. * C * interpolate(&self.rotation_curve, r).unwrap();
+
+            for i in 0..bodies_this_r {
+                // todo: Random, or even? Even is more uniform, which may be nice, but
+                // todo it may cause resonances. Maybe even, but with a random offset per ring?
+                let θ = rng.gen_range(0.0..TAU);
+                // let θ = TAU / bodies_this_r as f64 * i as f64;
+
+                let posit = Vec3::new(r * θ.cos(), r * θ.sin(), 0.0);
+
+                // Velocity direction: perpendicular to the radius vector
+                let v_x = -v_mag * θ.sin(); // Tangential velocity in x-direction
+                let v_y = v_mag * θ.cos(); // Tangential velocity in y-direction
+
+                let vel = Vec3::new(v_x, v_y, 0.0);
+
+                // todo?
+                let mass = 6.;
+
+                result.push(Body {
+                    posit,
+                    vel,
+                    accel: Vec3::new_zero(),
+                    mass,
+                })
+            }
+        }
+
+        result
+    }
+}
+
+/// todo: Move specific galaxy creation to its own module A/R
+#[derive(Clone, Copy, PartialEq)]
+pub enum GalaxyModel {
+    Ngc1560,
+    Ngc3198,
+    Ngc3115,
+    Ngc3031,
+    Ngc7331,
+}
+
+impl GalaxyModel {
+    pub fn descrip(&self) -> GalaxyDescrip {
+        match self {
+            /// Ludwig, Figures 3 and 5. todo: Partial/rough
+            Self::Ngc1560 => GalaxyDescrip {
+                shape: GalaxyShape::FlocculentSpiral, // todo ?
+                mass_density: vec![
+                    (0.01, 1.),
+                    (0.02, 1.),
+                    (0.05, 1.),
+                    (0.10, 1.),
+                    (0.8, 0.8),
+                    (1.0, 0.61),
+                    (3.0, 0.05),
+                    (10.0, 0.0),
+                ],
+                rotation_curve: vec![
+                    (0., 0.),
+                    (1., 0.00009),
+                    (2., 0.00013),
+                    (3., 0.00017),
+                    (4., 0.00020),
+                    (5., 0.00022),
+                    (6., 0.00024),
+                    (7., 0.000245),
+                    (8., 0.00025),
+                    (9., 0.000251),
+                    (10., 0.000251),
+                    (11., 0.000252),
+                    (12., 0.000252),
+                ],
+                luminosity: vec![],
+                eccentricity: 0.,
+                arm_count: 2,
+            },
+            Self::Ngc3198 => GalaxyDescrip {
+                shape: GalaxyShape::BarredSpiral,
+                mass_density: vec![
+                    (0.1, 1.),
+                    (0.2, 0.95),
+                    (0.5, 0.6),
+                    (1.0, 0.38),
+                    (3.0, 0.1),
+                    (5.0, 0.07),
+                    (7.0, 0.03),
+                    (10.0, 0.008),
+                ],
+                rotation_curve: vec![
+                    (0., 0.),
+                    (2., 0.00035),
+                    (4., 0.00045),
+                    (6., 0.00048),
+                    (8., 0.00051),
+                    (10., 0.00050),
+                    (12., 0.00049),
+                    (14., 0.00049),
+                    (16., 0.00049),
+                    (18., 0.00048),
+                    (20., 0.00048),
+                    (22., 0.00048),
+                    (24., 0.00047),
+                    (26., 0.00048),
+                    (28., 0.00049),
+                    (30., 0.00049),
+                ],
+                luminosity: vec![],
+                eccentricity: 0.,
+                arm_count: 2,
+            },
+            Self::Ngc3115 => GalaxyDescrip {
+                shape: GalaxyShape::Lenticular,
+                mass_density: vec![],
+                rotation_curve: vec![],
+                luminosity: vec![],
+                eccentricity: 0.,
+                arm_count: 2,
+            },
+            _ => unimplemented!(), // todo
+        }
     }
 
-    result
+    pub fn make_bodies(&self) -> Vec<Body> {
+        self.descrip().make_bodies()
+    }
 }

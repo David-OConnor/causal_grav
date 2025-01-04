@@ -7,8 +7,9 @@ use lin_alg::f64::Vec3;
 use rand::Rng;
 
 use crate::{
+    body_creation::GalaxyModel,
     gaussian::{COEFF_C, MAX_SHELL_R},
-    playback::{save, vec_to_f32, SnapShot, DEFAULT_SNAPSHOT_FILE},
+    playback::{save, vec3_to_f32, GravShellSnapshot, SnapShot, DEFAULT_SNAPSHOT_FILE},
     render::render,
 };
 
@@ -21,6 +22,7 @@ mod playback;
 mod properties;
 mod render;
 mod ui;
+mod util;
 // Shower thought, from looking at this from a first person view: View things from the body's perspective.
 // Can you make of it something like that?
 
@@ -57,7 +59,7 @@ const C: f64 = 40.;
 pub struct Config {
     num_timesteps: usize,
     dt_integration_max: f64,
-    /// Lower values here lead to higher precision.
+    /// Lower values here lead to higher precision, and slower time evolution.
     dynamic_dt_scaler: f64,
     shell_creation_ratio: usize,
     // num_rays_per_iter: usize,
@@ -74,10 +76,11 @@ impl Default for Config {
 
         Self {
             // num_timesteps: 1_000_000,
-            num_timesteps: 20_000,
+            num_timesteps: 10_000,
             shell_creation_ratio,
             dt_integration_max,
-            dynamic_dt_scaler: 0.01,
+            // dynamic_dt_scaler: 0.01,
+            dynamic_dt_scaler: 0.1,
             // num_rays_per_iter: 200,
             gauss_c: shell_spacing * COEFF_C,
         }
@@ -112,13 +115,13 @@ impl State {
     fn take_snapshot(&mut self, time: usize, dt: f64) {
         self.snapshots.push(SnapShot {
             time,
-            body_posits: self.bodies.iter().map(|b| vec_to_f32(b.posit)).collect(),
+            body_posits: self.bodies.iter().map(|b| vec3_to_f32(b.posit)).collect(),
             // V_at_bodies: self
             //     .bodies
             //     .iter()
             //     .map(|b| vec_to_f32(b.V_acting_on))
             //     .collect(),
-            body_accs: self.bodies.iter().map(|b| vec_to_f32(b.accel)).collect(),
+            body_accs: self.bodies.iter().map(|b| vec3_to_f32(b.accel)).collect(),
             // rays: self
             //     .rays
             //     .iter()
@@ -129,7 +132,11 @@ impl State {
             //         )
             //     })
             //     .collect(),
-            // shells: self.shells.clone(),
+            shells: self
+                .shells
+                .iter()
+                .map(|s| GravShellSnapshot::new(s))
+                .collect(),
             dt: dt as f32,
         })
     }
@@ -314,19 +321,21 @@ fn main() {
     let mut state = State::default();
     // state.dt_dynamic = state.config.dt_integration; // todo: Integrate this into State::default();
 
+    let model = GalaxyModel::Ngc1560;
+    state.bodies = model.make_bodies();
+
     // state.bodies = body_creation::make_galaxy_coarse(4, 6);
-    state.bodies = body_creation::make_galaxy_coarse(9, 4, 20);
+    // state.bodies = body_creation::make_galaxy_coarse(9, 4, 20);
+
     state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
     build(&mut state);
 
-    let rotation_curve = properties::rotation_curve(&state.bodies, Vec3::new_zero(), C);
+    let rotation_curve = properties::rotation_curve(&state.bodies, Vec3::new_zero(), 80., C);
+    let mass_density = properties::mass_density(&state.bodies, Vec3::new_zero(), 80.);
 
-    for pt in &rotation_curve {
-        println!("Rot pt: {:?}", pt);
-    }
-
-    properties::plot_rotation_curve(&rotation_curve, "test");
+    properties::plot_rotation_curve(&rotation_curve, "NGC 3198");
+    properties::plot_mass_density(&mass_density, "NGC 3198");
 
     println!("Complete. Rendering.");
 

@@ -2,7 +2,7 @@
 
 // todo: Output types A/R. Currently x/y tuples.
 
-const N_SAMPLE_PTS: usize = 40;
+const N_SAMPLE_PTS: usize = 20;
 
 use lin_alg::f64::Vec3;
 use plotters::{
@@ -13,9 +13,60 @@ use plotters::{
 
 use crate::Body;
 
+fn get_nearby_pts(bodies: &[Body], center: Vec3, r: f64, dr: f64) -> Vec<&Body> {
+    // Todo: Consider a fuzzy, weighted dropoff instead of these hard boundaries. Or not;
+    // todo: Maybe this is fine.
+    bodies
+        .into_iter()
+        .filter(|b| ((b.posit - center).magnitude() - r).abs() <= dr / 2.)
+        // .map(|b2| b2.posit)
+        .collect()
+}
+
+/// Gravitational potential (𝚽). X: r (kpc) Y: 𝚽 (J/kg)
+pub fn gravity_potential(bodies: &[Body], center: Vec3, r_max: f64) -> Vec<(f64, f64)> {
+    Vec::new()
+}
+
 /// Normalized mass density. X: r (kpc). Y: ρ/ρ_0
-pub fn mass_density(bodies: &[Body]) -> Vec<(f64, f64)> {
+pub fn mass_density(bodies: &[Body], center: Vec3, r_max: f64) -> Vec<(f64, f64)> {
     let mut result = Vec::with_capacity(N_SAMPLE_PTS);
+
+    let dr = r_max / N_SAMPLE_PTS as f64;
+
+    // todo: Fix this. I believe it depends on the model. Determines rho_0.
+    let r0_i = 1;
+    let mut rho_0 = 1.;
+
+    for i in 0..N_SAMPLE_PTS {
+        let r = i as f64 * dr;
+
+        let nearby_masses: Vec<f64> = get_nearby_pts(&bodies, center, r, dr)
+            .into_iter()
+            .map(|b2| b2.mass)
+            .collect();
+
+        if nearby_masses.is_empty() {
+            result.push((r, 0.));
+        } else {
+            let mut mass = 0.;
+            for nearby_mass in &nearby_masses {
+                mass += nearby_mass;
+            }
+
+            if i == r0_i {
+                rho_0 = mass
+            }
+
+            // todo: Density; not pure mass. Although this may be fine for now as it's normalized?
+            result.push((r, mass));
+        }
+    }
+
+    // Normalize.
+    for r in &mut result {
+        r.1 /= rho_0
+    }
 
     result
 }
@@ -28,27 +79,26 @@ pub fn luminosity(bodies: &[Body]) -> Vec<(f64, f64)> {
 }
 
 /// Normalized rotation curve. X: r (kpc). Y: V/c
-pub fn rotation_curve(bodies: &[Body], center: Vec3, c: f64) -> Vec<(f64, f64)> {
+/// We specify r_max, to avoid calculations involving outliers. But, perhaps should calculate anyway.
+pub fn rotation_curve(bodies: &[Body], center: Vec3, r_max: f64, c: f64) -> Vec<(f64, f64)> {
     let mut result = Vec::with_capacity(N_SAMPLE_PTS);
 
-    // note: You could hard-code range_max for performance reasons.
-    let mut r_max = 0.;
-    for body in bodies {
-        let r = (body.posit - center).magnitude();
-        if r > r_max {
-            r_max = r;
-        }
-    }
+    // // note: You could hard-code range_max for performance reasons.
+    // let mut r_max = 0.;
+    // for body in bodies {
+    //     let r = (body.posit - center).magnitude();
+    //     if r > r_max {
+    //         r_max = r;
+    //     }
+    // }
+
     let dr = r_max / N_SAMPLE_PTS as f64;
 
     for i in 0..N_SAMPLE_PTS {
         let r = i as f64 * dr;
 
-        // Todo: Consider a fuzzy, weighted dropoff instead of these hard boundaries. Or not;
-        // todo: Maybe this is fine.
-        let nearby_pts: Vec<_> = bodies
+        let nearby_pts: Vec<Vec3> = get_nearby_pts(&bodies, center, r, dr)
             .into_iter()
-            .filter(|b| ((b.posit - center).magnitude() - r).abs() <= dr / 2.)
             .map(|b2| b2.posit)
             .collect();
 
@@ -74,7 +124,7 @@ pub fn sersic(bodies: &[Body]) -> Vec<(f64, f64)> {
 }
 
 /// Display a 2d plot of properties, e.g. rotation curve, luminosity etc.
-pub fn plot(data: &[(f64, f64)], x_label: &str, y_label: &str, plot_title: &str) {
+pub fn plot(data: &[(f64, f64)], x_label: &str, y_label: &str, plot_title: &str, filename: &str) {
     // Find the x and y ranges using PartialOrd
     let x_range = data
         .iter()
@@ -91,7 +141,8 @@ pub fn plot(data: &[(f64, f64)], x_label: &str, y_label: &str, plot_title: &str)
         });
 
     // Create a drawing area for the plot
-    let root = BitMapBackend::new("output.png", (800, 600)).into_drawing_area();
+    let fname = format!("{filename}.png");
+    let root = BitMapBackend::new(&fname, (800, 600)).into_drawing_area();
     root.fill(&WHITE).unwrap();
 
     // Create a chart builder
@@ -132,6 +183,17 @@ pub fn plot_rotation_curve(data: &[(f64, f64)], desc: &str) {
         data,
         "r (kpc)",
         "v / c",
-        &format!("Normalized rotation curve for {desc}"),
+        &format!("Normalized rotation curve of{desc}"),
+        "rot_plot",
+    );
+}
+
+pub fn plot_mass_density(data: &[(f64, f64)], desc: &str) {
+    plot(
+        data,
+        "r (kpc)",
+        "ρ / ρ₀",
+        &format!("Normalized mass density of {desc}"),
+        "mass_plot",
     );
 }

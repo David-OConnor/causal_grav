@@ -63,7 +63,7 @@ pub fn calc_acc_inst(posit: Vec3, bodies_other: &[Body], id_acted_on: usize) -> 
         let acc_dir = body_src.posit - posit;
 
         // todo: A/R.
-        const SOFTENING_FACTOR_SQ: f64 = 0.001;
+        const SOFTENING_FACTOR_SQ: f64 = 0.01;
 
         result += acc_dir * body_src.mass / (acc_dir.magnitude().powi(3) + SOFTENING_FACTOR_SQ);
         // result += acc_dir * body_src.mass / (acc_dir.magnitude().powi(3));
@@ -72,4 +72,10 @@ pub fn calc_acc_inst(posit: Vec3, bodies_other: &[Body], id_acted_on: usize) -> 
     }
 
     result
+}
+
+/// Finds the gravitomagnetic vector potential, analagous to magnetism in Maxwell's equations for EM.
+pub fn gravitomagnetic_force(bodies: &[Body]) -> Vec3 {
+    // todo: Is this from motion of masses, or rotation? A fn for each?
+    Vec3::new_zero()
 }

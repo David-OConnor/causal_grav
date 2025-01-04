@@ -19,7 +19,10 @@ use lin_alg::{
     f64::Vec3,
 };
 
-use crate::render::{BODY_COLOR, BODY_SHINYNESS, BODY_SIZE};
+use crate::{
+    render::{BODY_COLOR, BODY_SHINYNESS, BODY_SIZE, SHELL_COLOR},
+    GravShell,
+};
 
 pub const DEFAULT_SNAPSHOT_FILE: &str = "snapshot.cg";
 
@@ -29,6 +32,24 @@ pub struct Vec3f32 {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+}
+
+#[derive(Debug, Encode, Decode)]
+/// A compact version
+pub struct GravShellSnapshot {
+    center: Vec3f32,
+    radius: f32,
+    src_mass: f32,
+}
+
+impl GravShellSnapshot {
+    pub fn new(shell: &GravShell) -> Self {
+        Self {
+            center: vec3_to_f32(shell.center),
+            radius: shell.radius as f32,
+            src_mass: shell.src_mass as f32,
+        }
+    }
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -44,11 +65,11 @@ pub struct SnapShot {
     // The usize is body id.
     // pub rays: Vec<(Vec3f32, usize)>,
     // todo: Compact form for shells, as above?
-    // pub shells: Vec<GravShell>,
+    pub shells: Vec<GravShellSnapshot>,
     pub dt: f32,
 }
 
-pub fn vec_to_f32(v: Vec3) -> Vec3f32 {
+pub fn vec3_to_f32(v: Vec3) -> Vec3f32 {
     Vec3f32 {
         x: v.x as f32,
         y: v.y as f32,
@@ -87,19 +108,23 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
 
     // todo: Draw an actual shell instead of a sphere.
     // todo: Add back once you sort out transparency.
-    // for shell in &snapshot.shells {
-    // let mut entity = Entity::new(
-    //     1,
-    //     vec_to_f32(shell.center),
-    //     Quaternion::new_identity(),
-    //     shell.radius as f32,
-    //     RAY_COLORS[shell.emitter_id % RAY_COLORS.len()],
-    //     RAY_SHINYNESS,
-    // );
-    // // entity.opacity = SHELL_OPACITY;
-    // entity.opacity = 0.; // todo temp
-    // entities.push(entity);
-    // }
+    for shell in &snapshot.shells {
+        let center = Vec3f32_b::new(shell.center.x, shell.center.y, shell.center.z);
+
+        // let entity = Entity::new(
+        //     2,
+        //     center,
+        //     Quaternion::new_identity(), // todo: A/R?
+        //     shell.radius,
+        //     // todo: Custom colors A/R
+        //     // todo: Color code by radius.
+        //     SHELL_COLOR, // todo: Color-code A/R
+        //     BODY_SHINYNESS,
+        // );
+        //
+        // // entity.opacity = SHELL_OPACITY;
+        // entities.push(entity);
+    }
 }
 
 /// Save to file, using Bincode.

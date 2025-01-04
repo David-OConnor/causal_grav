@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 graphics = { path = "../../graphics" }
-lin_alg = "^1.0"
+lin_alg = "^1.0.1"
 #lin_alg = { path = "../../lin_alg" }
-egui = "^0.29.1"
+egui = "^0.30.0"
 
 rand = "^0.8.5"
 

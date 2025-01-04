@@ -13,7 +13,7 @@ Look into, and add to your source: Alexandre Deur's theory that gravitons intera
 
 Note: Two factors to consider for what causes galaxy curves to differ from solar: 
  - Speed of light relative to distance
- - and mass distribution.
+ - and mass density
 
 Deur thinks disc thickness is important. This is rel to your model ICs.
 

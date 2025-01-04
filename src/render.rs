@@ -21,7 +21,9 @@ const RENDER_DIST: f32 = 200.;
 
 pub const BODY_SIZE: f32 = 0.02; // Note: We scale by mass as well.
 pub const BODY_SHINYNESS: f32 = 2.;
+pub const SHELL_SHINYNESS: f32 = 2.;
 pub const BODY_COLOR: Color = (1.0, 0.2, 0.2);
+pub const SHELL_COLOR: Color = (1.0, 0.6, 0.2);
 
 pub const SHELL_OPACITY: f32 = 0.01;
 
@@ -42,7 +44,13 @@ fn render_handler(_state: &mut State, _scene: &mut Scene, _dt: f32) -> EngineUpd
 /// Entry point to our render and event loop.
 pub fn render(state: State) {
     let mut scene = Scene {
-        meshes: vec![Mesh::new_sphere(1., 12, 12), Mesh::new_sphere(1., 30, 30)],
+        meshes: vec![
+            Mesh::new_sphere(1., 12, 12),
+            Mesh::new_sphere(1., 30, 30),
+            // todo: Mesh for partial sphere.
+            Mesh::new_sphere(1., 12, 12),
+            Mesh::new_sphere(1., 30, 30),
+        ],
         entities: Vec::new(), // updated below.
         camera: Camera {
             fov_y: TAU / 8.,
