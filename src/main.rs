@@ -54,6 +54,8 @@ mod util;
 const SNAPSHOT_RATIO: usize = 4;
 
 // Note: Setting this too high is problematic.
+// todo: Maybe a different time unit?
+// const C: f64 = 9.72e-12; // Rough; kpc/s^2.
 const C: f64 = 40.;
 
 pub struct Config {
@@ -69,7 +71,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         let dt_integration_max = 0.01;
-        let shell_creation_ratio = 6;
+        let shell_creation_ratio = 12;
 
         // In distance: t * d/t = d.
         let shell_spacing = dt_integration_max * shell_creation_ratio as f64 * C;
@@ -77,6 +79,7 @@ impl Default for Config {
         Self {
             // num_timesteps: 1_000_000,
             num_timesteps: 10_000,
+            // num_timesteps: 1000,
             shell_creation_ratio,
             dt_integration_max,
             // dynamic_dt_scaler: 0.01,
@@ -105,6 +108,7 @@ struct State {
     // /// Defaults to `Config::dt_integration`, but becomes more precise when
     // /// bodies are close. This is a global DT, vice local only for those bodies.
     // dt_dynamic: f64,
+    time_elapsed: f64,
 }
 
 impl State {
@@ -112,9 +116,9 @@ impl State {
         self.shells.retain(|shell| shell.radius <= MAX_SHELL_R);
     }
 
-    fn take_snapshot(&mut self, time: usize, dt: f64) {
+    fn take_snapshot(&mut self, time: f64, dt: f64) {
         self.snapshots.push(SnapShot {
-            time,
+            time: time as f32,
             body_posits: self.bodies.iter().map(|b| vec3_to_f32(b.posit)).collect(),
             // V_at_bodies: self
             //     .bodies
@@ -208,10 +212,30 @@ struct GravShell {
 }
 
 /// Entry point for computation; rename A/R.
-fn build(state: &mut State) {
+fn build(state: &mut State, acc_inst: bool) {
+    state.take_snapshot(0., 0.); // Initial snapshot; t=0.
+
+    // Allow gravity shells to propogate to reach a steady state, ideally.
+    // todo: make this dynamic
+    let mut farthest_r = 0.;
+    for body in &state.bodies {
+        let r = body.posit.magnitude();
+        if r > farthest_r {
+            farthest_r = r;
+        }
+    }
+    // 2x: For the case of opposite sides of circle. .1: Pad. May not be required.
+    farthest_r *= 2.1;
+    let integrate_start_t = farthest_r / C;
+
+    println!(
+        "T start integration: {:?} T: {:?}. Farthest r: {:.1}",
+        integrate_start_t, state.time_elapsed, farthest_r
+    );
+
     for t in 0..state.config.num_timesteps {
         // Create a new set of rays.
-        if t % state.config.shell_creation_ratio == 0 {
+        if !acc_inst && t % state.config.shell_creation_ratio == 0 {
             for (id, body) in state.bodies.iter().enumerate() {
                 // for _ in 0..state.config.num_rays_per_iter {
                 // state.rays.push(body.create_ray(id));
@@ -219,27 +243,6 @@ fn build(state: &mut State) {
                 state.shells.push(body.create_shell(id));
             }
         }
-
-        // for (i, body) in state.bodies.iter_mut().enumerate() {
-        // body.accel = accel::accel(
-        //     body,
-        //     &state.rays,
-        //     &state.shells,
-        //     i,
-        //     state.config.dt_integration,
-        // );
-
-        // body.accel = accel::acc_shells(
-        //     body,
-        //     &state.rays,
-        //     &state.shells,
-        //     i,
-        //     state.config.dt_integration,
-        //     state.config.gauss_c,
-        // );
-
-        // body.accel = accel::calc_acc_shell(&state.shells, body.posit, i, state.config.gauss_c);
-        // }
 
         // Update ray propogation
         // integrate::integrate_rk4_ray(&mut state.rays, state.config.dt_integration);
@@ -250,9 +253,6 @@ fn build(state: &mut State) {
         for shell in &mut state.shells {
             shell.radius += C * state.config.dt_integration_max;
         }
-
-        let acc_inst = true;
-        // let acc_inst = false;
 
         // todo: C+P from integrate, so we can test acc vals.
         let bodies_other = state.bodies.clone(); // todo: I don't like this. Avoids mut error.
@@ -284,18 +284,15 @@ fn build(state: &mut State) {
                 }
             }
         }
-        // if dt_min < state.config.dt_integration - f64::EPSILON {
-        //     println!("DT MIN: {:?}", dt_min);
-        // }
 
         for (id, body) in &mut state.bodies.iter_mut().enumerate() {
             body.accel = acc(id, body.posit);
         }
 
-        state.take_snapshot(t / SNAPSHOT_RATIO, dt_min); // Initial snapshot; t=0.
+        state.time_elapsed += dt_min;
 
-        // Allow waves to propogate to reach a steady state, ideally.
-        if acc_inst || t > 1_000 {
+        // todo: Is
+        if acc_inst || state.time_elapsed > integrate_start_t {
             // Update body motion.
             integrate::integrate_rk4(
                 &mut state.bodies,
@@ -310,7 +307,7 @@ fn build(state: &mut State) {
         // Note: This can use a substantial amount of memory.
 
         if t % SNAPSHOT_RATIO == 0 {
-            state.take_snapshot(t / SNAPSHOT_RATIO, dt_min);
+            state.take_snapshot(state.time_elapsed, dt_min);
         }
         // println!("Shell ct: {:?}", state.shells.len());
     }
@@ -324,12 +321,9 @@ fn main() {
     let model = GalaxyModel::Ngc1560;
     state.bodies = model.make_bodies();
 
-    // state.bodies = body_creation::make_galaxy_coarse(4, 6);
-    // state.bodies = body_creation::make_galaxy_coarse(9, 4, 20);
-
     state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
-    build(&mut state);
+    build(&mut state, false);
 
     let rotation_curve = properties::rotation_curve(&state.bodies, Vec3::new_zero(), 80., C);
     let mass_density = properties::mass_density(&state.bodies, Vec3::new_zero(), 80.);

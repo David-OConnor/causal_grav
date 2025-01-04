@@ -109,6 +109,8 @@ https://www.smbc-comics.com/comic/how-math-works
 - NGC 3198
 - NGC 3115
 
+Note on the inherrent difficulty of modeling these based on the limited data we have.
+
 
 ## Testable predictions
 
@@ -127,4 +129,5 @@ https://www.smbc-comics.com/comic/how-math-works
  - https://arxiv.org/pdf/1503.07440
  - https://arxiv.org/abs/astro-ph/0507619
  - https://arxiv.org/pdf/2109.00357 (?)
+ - https://arxiv.org/abs/gr-qc/9909087 (Carlip: Abberation and the Speed of Gravity)
  -  todo: Paper on lagged newtonian models cancelling velocity-dependent terms

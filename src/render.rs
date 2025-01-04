@@ -46,10 +46,7 @@ pub fn render(state: State) {
     let mut scene = Scene {
         meshes: vec![
             Mesh::new_sphere(1., 12, 12),
-            Mesh::new_sphere(1., 30, 30),
             // todo: Mesh for partial sphere.
-            Mesh::new_sphere(1., 12, 12),
-            Mesh::new_sphere(1., 30, 30),
         ],
         entities: Vec::new(), // updated below.
         camera: Camera {

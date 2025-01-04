@@ -54,7 +54,7 @@ impl GravShellSnapshot {
 
 #[derive(Debug, Encode, Decode)]
 pub struct SnapShot {
-    pub time: usize,
+    pub time: f32,
     // To save memory, we store the snapshots as f32; we only need f64 precision
     // during the integration.
     pub body_posits: Vec<Vec3f32>,
@@ -88,7 +88,6 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
             0,
             body_posit,
             Quaternion::new_identity(),
-            // todo: Set up body masses.
             f32::min(BODY_SIZE * body_masses[i], 0.7),
             BODY_COLOR,
             BODY_SHINYNESS,
@@ -109,7 +108,7 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
     // todo: Draw an actual shell instead of a sphere.
     // todo: Add back once you sort out transparency.
     for shell in &snapshot.shells {
-        let center = Vec3f32_b::new(shell.center.x, shell.center.y, shell.center.z);
+        // let center = Vec3f32_b::new(shell.center.x, shell.center.y, shell.center.z);
 
         // let entity = Entity::new(
         //     2,

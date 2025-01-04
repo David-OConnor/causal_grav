@@ -1429,8 +1429,6 @@ dependencies = [
 [[package]]
 name = "lin_alg"
 version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7a4c410a7e04853e4d8098d29151300b78cf9141d9f561cdfb08c2c4878e4e3"
 
 [[package]]
 name = "linux-raw-sys"

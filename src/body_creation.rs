@@ -2,13 +2,10 @@
 
 use std::f64::consts::TAU;
 
-use lin_alg::f64::Vec3;
+use lin_alg::{f64::Vec3, linspace};
 use rand::Rng;
 
-use crate::{
-    util::{interpolate, linspace},
-    Body, C,
-};
+use crate::{util::interpolate, Body, C};
 
 /// Create n bodies, in circular orbit, at equal distances from each other.
 pub fn make_bodies_balanced(num: usize, r: f64, mass_body: f64, mass_central: f64) -> Vec<Body> {
@@ -35,62 +32,6 @@ pub fn make_bodies_balanced(num: usize, r: f64, mass_body: f64, mass_central: f6
         });
     }
 
-    result
-}
-
-pub fn make_galaxy_coarse(
-    num_bands: usize,
-    bodies_per_band: usize,
-    bodies_bulge: usize,
-) -> Vec<Body> {
-    let mass_central = 1_000.;
-
-    let n_bodies_spiral = (num_bands - 1) * bodies_per_band + 1;
-    let mut result = Vec::with_capacity(n_bodies_spiral + bodies_bulge);
-
-    // A central mass
-    result.push(Body {
-        posit: Vec3::new_zero(),
-        vel: Vec3::new_zero(),
-        accel: Vec3::new_zero(),
-        mass: mass_central,
-    });
-
-    let dist_spacing = 2.5;
-    let mass = 6.;
-
-    // The bulge
-    result.extend(make_halo_bulge(4., bodies_bulge, mass));
-
-    // todo: Pass as params etc.
-
-    for i in 1..num_bands {
-        let r = dist_spacing * i as f64;
-
-        // if r < 4. {
-        //     continue; // todo temp
-        // }
-
-        // todo: the central mass method here isn't correct, as it neglects the other masses.
-        // todo: (Used to circularize orbits)
-
-        let mut mass_central_adj = mass_central + (i - 1) as f64 * mass * bodies_per_band as f64
-            - (num_bands - (i - 1)) as f64 * mass * bodies_per_band as f64;
-
-        // mass_central_adj *= 2.0;
-
-        result.extend_from_slice(&make_bodies_balanced(
-            bodies_per_band,
-            r,
-            mass,
-            mass_central_adj,
-        ));
-
-        // result
-        //     .extend_from_slice(&make_bodies_balanced(3, 5., 10., mass_central));
-        // result
-        //     .extend_from_slice(&make_bodies_balanced(3, 10., 10., mass_central));
-    }
     result
 }
 
@@ -140,8 +81,21 @@ pub struct GalaxyDescrip {
     /// alpha (arcsec), mu (mac arcsec^-2)
     pub luminosity: Vec<(f64, f64)>,
     // todo: More A/R
+    /// 0 means a circle. 1 is fully elongated.
     pub eccentricity: f64,
     pub arm_count: usize,
+    /// Not a fundamental property; used to normalize mass density etc?
+    /// todo: I'm not sure what this is
+    pub r_s: f64,
+}
+
+fn ring_area(r: f64, dr: f64) -> f64 {
+    let r_outer = r + dr / 2.;
+    let r_inner = r - dr / 2.;
+    let area_outer = r_outer.powi(2) * TAU / 2.;
+    let area_inner = r_inner.powi(2) * TAU / 2.;
+
+    area_outer - area_inner
 }
 
 impl GalaxyDescrip {
@@ -151,22 +105,38 @@ impl GalaxyDescrip {
         let mut result = Vec::with_capacity(69); // todo
         let mut rng = rand::thread_rng();
 
-        // todo: eccentricity.
         // todo: Event along rings instead of random?
 
         // Note: Our distributions tend to be heavily biased towards low r, so if we extend
         // all the way to the end, we will likely leave out lots of values there.
 
-        let num_rings = 10;
-        let rs = linspace(0., self.mass_density.last().unwrap().0, num_rings);
+        let r_last = self.mass_density.last().unwrap().0;
+
+        let num_rings = 12;
+        let dr = r_last / num_rings as f64;
+
+        let r_all = linspace(0., r_last, num_rings);
+
+        // todo: Maybe dynamically vary this.
+        let mass_per_body = 6.;
 
         // todo: Split into disc + bulge, among other things.
-        for r in rs {
+        for r in r_all {
             // todo: Most of this is a hack.
 
+            // This is ρ/ρ_0.
             let rho = interpolate(&self.mass_density, r).unwrap();
-            let circum = TAU * r;
-            let bodies_this_r = (10. * rho * circum) as usize;
+
+            // Calculate
+            let disc_thickness = 30.; // todo: Important question. Disc thickness?
+            let ring_volume = ring_area(r, dr) * disc_thickness;
+            // let circum = TAU * r;
+
+            // todo: Normalize?
+            // rho is (normalized) M/L^3. So, M = rho * L^3
+            let bodies_this_r = (1. * rho * ring_volume / mass_per_body) as usize;
+
+            println!("N bodies: {:?}", bodies_this_r);
 
             // Multiply by C, because the curve is normalized to C.
             // todo: The fudge factor...
@@ -178,7 +148,12 @@ impl GalaxyDescrip {
                 let θ = rng.gen_range(0.0..TAU);
                 // let θ = TAU / bodies_this_r as f64 * i as f64;
 
-                let posit = Vec3::new(r * θ.cos(), r * θ.sin(), 0.0);
+                // Apply eccentricity: Scale radius in x-direction
+                let scale_x = 1.0 - self.eccentricity; // Eccentricity factor for x-axis
+
+                let posit = Vec3::new(r * θ.cos() * scale_x, r * θ.sin(), 0.0);
+
+                // todo: Does v need to be a function of theta due to eccentricity?
 
                 // Velocity direction: perpendicular to the radius vector
                 let v_x = -v_mag * θ.sin(); // Tangential velocity in x-direction
@@ -186,14 +161,11 @@ impl GalaxyDescrip {
 
                 let vel = Vec3::new(v_x, v_y, 0.0);
 
-                // todo?
-                let mass = 6.;
-
                 result.push(Body {
                     posit,
                     vel,
                     accel: Vec3::new_zero(),
-                    mass,
+                    mass: mass_per_body,
                 })
             }
         }
@@ -244,8 +216,9 @@ impl GalaxyModel {
                     (12., 0.000252),
                 ],
                 luminosity: vec![],
-                eccentricity: 0.,
+                eccentricity: 0.0, // todo temp
                 arm_count: 2,
+                r_s: 1.46e-6,
             },
             Self::Ngc3198 => GalaxyDescrip {
                 shape: GalaxyShape::BarredSpiral,
@@ -280,6 +253,7 @@ impl GalaxyModel {
                 luminosity: vec![],
                 eccentricity: 0.,
                 arm_count: 2,
+                r_s: 1.2e-5,
             },
             Self::Ngc3115 => GalaxyDescrip {
                 shape: GalaxyShape::Lenticular,
@@ -288,6 +262,7 @@ impl GalaxyModel {
                 luminosity: vec![],
                 eccentricity: 0.,
                 arm_count: 2,
+                r_s: 6.97e-16,
             },
             _ => unimplemented!(), // todo
         }
