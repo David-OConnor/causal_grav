@@ -8,7 +8,7 @@ use graphics::{
 };
 use lin_alg::f32::{Quaternion, Vec3};
 
-use crate::{playback::change_snapshot, ui::ui_handler, State};
+use crate::{build, playback::change_snapshot, ui::ui_handler, State};
 
 type Color = (f32, f32, f32);
 

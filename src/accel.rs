@@ -52,7 +52,7 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, id_acted_on: usize, she
 }
 
 /// An instantaneous-accel control.
-pub fn calc_acc_inst(posit: Vec3, bodies_other: &[Body], id_acted_on: usize) -> Vec3 {
+pub fn acc_newton(posit: Vec3, bodies_other: &[Body], id_acted_on: usize) -> Vec3 {
     let mut result = Vec3::new_zero();
 
     for (i, body_src) in bodies_other.iter().enumerate() {

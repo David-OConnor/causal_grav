@@ -90,9 +90,24 @@ impl Default for Config {
     }
 }
 
+#[derive(Copy, Clone, PartialEq)]
+pub enum ForceModel {
+    Newton,
+    Mond(f64), // inner is a placeholder for a coefficient
+    GaussRings,
+}
+
+impl Default for ForceModel {
+    fn default() -> Self {
+        ForceModel::Newton
+    }
+}
+
 #[derive(Default)]
 pub struct StateUi {
     snapshot_selected: usize,
+    force_model: ForceModel,
+    building: bool,
 }
 
 #[derive(Default)]
@@ -212,7 +227,8 @@ struct GravShell {
 }
 
 /// Entry point for computation; rename A/R.
-fn build(state: &mut State, acc_inst: bool) {
+fn build(state: &mut State, force_model: ForceModel) {
+    state.ui.building = true;
     state.take_snapshot(0., 0.); // Initial snapshot; t=0.
 
     // Allow gravity shells to propogate to reach a steady state, ideally.
@@ -224,8 +240,8 @@ fn build(state: &mut State, acc_inst: bool) {
             farthest_r = r;
         }
     }
-    // 2x: For the case of opposite sides of circle. .1: Pad. May not be required.
-    farthest_r *= 2.1;
+    // 2x: For the case of opposite sides of circle. More: A pad. May not be required.
+    farthest_r *= 2.5;
     let integrate_start_t = farthest_r / C;
 
     println!(
@@ -235,7 +251,7 @@ fn build(state: &mut State, acc_inst: bool) {
 
     for t in 0..state.config.num_timesteps {
         // Create a new set of rays.
-        if !acc_inst && t % state.config.shell_creation_ratio == 0 {
+        if force_model == ForceModel::GaussRings && t % state.config.shell_creation_ratio == 0 {
             for (id, body) in state.bodies.iter().enumerate() {
                 // for _ in 0..state.config.num_rays_per_iter {
                 // state.rays.push(body.create_ray(id));
@@ -257,12 +273,12 @@ fn build(state: &mut State, acc_inst: bool) {
         // todo: C+P from integrate, so we can test acc vals.
         let bodies_other = state.bodies.clone(); // todo: I don't like this. Avoids mut error.
 
-        let acc = |id, posit| {
-            if acc_inst {
-                accel::calc_acc_inst(posit, &bodies_other, id)
-            } else {
+        let acc = |id, posit| match force_model {
+            ForceModel::Newton => accel::acc_newton(posit, &bodies_other, id),
+            ForceModel::GaussRings => {
                 accel::calc_acc_shell(&state.shells, posit, id, state.config.gauss_c)
             }
+            ForceModel::Mond(_) => unimplemented!(),
         };
 
         // Calculate dt for this step, based on the closest/fastest rel velocity.
@@ -292,14 +308,14 @@ fn build(state: &mut State, acc_inst: bool) {
         state.time_elapsed += dt_min;
 
         // todo: Is
-        if acc_inst || state.time_elapsed > integrate_start_t {
+        if force_model != ForceModel::GaussRings || state.time_elapsed > integrate_start_t {
             // Update body motion.
             integrate::integrate_rk4(
                 &mut state.bodies,
                 &state.shells,
                 dt_min,
                 state.config.gauss_c,
-                acc_inst,
+                force_model,
             );
         }
 
@@ -311,6 +327,8 @@ fn build(state: &mut State, acc_inst: bool) {
         }
         // println!("Shell ct: {:?}", state.shells.len());
     }
+
+    state.ui.building = false;
 }
 
 fn main() {
@@ -323,7 +341,11 @@ fn main() {
 
     state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
-    build(&mut state, false);
+    state.ui.force_model = ForceModel::Newton;
+
+    let fm = state.ui.force_model;
+    // todo: Don't auto-build, but we a graphics engine have a prob when we don't.
+    build(&mut state, fm);
 
     let rotation_curve = properties::rotation_curve(&state.bodies, Vec3::new_zero(), 80., C);
     let mass_density = properties::mass_density(&state.bodies, Vec3::new_zero(), 80.);

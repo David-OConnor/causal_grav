@@ -131,3 +131,4 @@ Note on the inherrent difficulty of modeling these based on the limited data we 
  - https://arxiv.org/pdf/2109.00357 (?)
  - https://arxiv.org/abs/gr-qc/9909087 (Carlip: Abberation and the Speed of Gravity)
  -  todo: Paper on lagged newtonian models cancelling velocity-dependent terms
+ - [The mass distribution of ... NGC 1560 (Broeils, 1990)](https://articles.adsabs.harvard.edu/pdf/1992A%26A...256...19B)

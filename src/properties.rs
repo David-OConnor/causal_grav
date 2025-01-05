@@ -80,6 +80,7 @@ pub fn luminosity(bodies: &[Body]) -> Vec<(f64, f64)> {
 
 /// Normalized rotation curve. X: r (kpc). Y: V/c
 /// We specify r_max, to avoid calculations involving outliers. But, perhaps should calculate anyway.
+/// todo: In km/s for now, not V/C.
 pub fn rotation_curve(bodies: &[Body], center: Vec3, r_max: f64, c: f64) -> Vec<(f64, f64)> {
     let mut result = Vec::with_capacity(N_SAMPLE_PTS);
 
@@ -109,7 +110,8 @@ pub fn rotation_curve(bodies: &[Body], center: Vec3, r_max: f64, c: f64) -> Vec<
             for pt in &nearby_pts {
                 v += pt.magnitude();
             }
-            result.push((r, v / (nearby_pts.len() as f64 * c)));
+            // result.push((r, v / (nearby_pts.len() as f64 * c)));
+            result.push((r, v / (nearby_pts.len() as f64)));
         }
     }
 

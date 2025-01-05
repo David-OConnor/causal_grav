@@ -52,7 +52,7 @@ impl GravShellSnapshot {
     }
 }
 
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug, Encode, Decode, Default)]
 pub struct SnapShot {
     pub time: f32,
     // To save memory, we store the snapshots as f32; we only need f64 precision

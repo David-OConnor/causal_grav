@@ -1,20 +1,18 @@
-use crate::{accel, Body, GravShell};
+use crate::{accel, Body, ForceModel, GravShell};
 
 pub fn integrate_rk4(
     bodies: &mut [Body],
     shells: &[GravShell],
     dt: f64,
     gauss_c: f64,
-    acc_inst: bool,
+    force_model: ForceModel,
 ) {
     let bodies_other = bodies.to_owned(); // todo: I don't like this. Avoids mut error.
 
-    let acc = |id, posit| {
-        if acc_inst {
-            accel::calc_acc_inst(posit, &bodies_other, id)
-        } else {
-            accel::calc_acc_shell(shells, posit, id, gauss_c)
-        }
+    let acc = |id, posit| match force_model {
+        ForceModel::Newton => accel::acc_newton(posit, &bodies_other, id),
+        ForceModel::GaussRings => accel::calc_acc_shell(shells, posit, id, gauss_c),
+        ForceModel::Mond(_) => unimplemented!(),
     };
 
     for (id, body) in bodies.iter_mut().enumerate() {
