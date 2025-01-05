@@ -78,7 +78,7 @@ pub struct GalaxyDescrip {
     pub mass_density: Vec<(f64, f64)>,
     /// r (kpc), v/c
     pub rotation_curve: Vec<(f64, f64)>,
-    /// alpha (arcsec), mu (mac arcsec^-2)
+    /// r (kpc), mu (mac arcsec^-2)
     /// todo: Consider removing `luminosity`; unused.
     pub luminosity: Vec<(f64, f64)>,
     // todo: More A/R
@@ -88,6 +88,8 @@ pub struct GalaxyDescrip {
     /// Not a fundamental property; used to normalize mass density etc?
     /// todo: I'm not sure what this is
     pub r_s: f64,
+    /// Used in MOND
+    pub a_0_mond: f64,
 }
 
 fn ring_area(r: f64, dr: f64) -> f64 {
@@ -199,7 +201,7 @@ impl GalaxyModel {
                 // this using two different, equivalent conventions)
                 let α_conv_factor = 0.01455;
 
-                let luminosity = vec![
+                let luminosity_arcsec = vec![
                     (0.0, 22.27),
                     (2.0, 22.30),
                     (4.0, 22.31),
@@ -355,7 +357,7 @@ impl GalaxyModel {
                 ];
 
                 // X axis: arc sec.
-                let rot_curve_raw = vec![
+                let rot_curve_arcsec = vec![
                     (15., 4.5),
                     (30., 8.4),
                     (45., 14.0),
@@ -393,7 +395,7 @@ impl GalaxyModel {
                     (570., 76.6),
                 ];
 
-                let rot_curve_raw_corr = vec![
+                let rot_curve_corr_arcsec = vec![
                     (15., 5.0),
                     (30., 8.9),
                     (45., 14.5),
@@ -431,11 +433,16 @@ impl GalaxyModel {
                     (570., 78.7),
                 ];
 
-                let rot_curve: Vec<(f64, f64)> = rot_curve_raw
+                let luminosity: Vec<(f64, f64)> = luminosity_arcsec
                     .iter()
                     .map(|(x, y)| (α_conv_factor * x, *y))
                     .collect();
-                let rot_curve_corr: Vec<(f64, f64)> = rot_curve_raw_corr
+
+                let rot_curve: Vec<(f64, f64)> = rot_curve_arcsec
+                    .iter()
+                    .map(|(x, y)| (α_conv_factor * x, *y))
+                    .collect();
+                let rot_curve_corr: Vec<(f64, f64)> = rot_curve_corr_arcsec
                     .iter()
                     .map(|(x, y)| (α_conv_factor * x, *y))
                     .collect();
@@ -470,13 +477,14 @@ impl GalaxyModel {
                     // Broeils. "
                     // X axis: Arcsec (''). 1'' is 14.5pc at 3.0 Mpc"
                     // Y axis is mu; mag arcsec^-2
-                    luminosity: vec![],
+                    luminosity,
                     eccentricity: 0.0, // todo temp
                     // eccentricity: 0.18, // Broeils
                     arm_count: 2,
                     r_s: 1.46e-6,
                     // total H mass: 8.2e8 solar masses // Broeils
                     // Total blue luminosity: 3.45e8 solar luminosities // Broeils
+                    a_0_mond: 1.21, // Broeils
                 }
             }
             Self::Ngc3198 => GalaxyDescrip {
@@ -513,6 +521,7 @@ impl GalaxyModel {
                 eccentricity: 0.,
                 arm_count: 2,
                 r_s: 1.2e-5,
+                a_0_mond: 0., // todo
             },
             Self::Ngc3115 => GalaxyDescrip {
                 shape: GalaxyShape::Lenticular,
@@ -522,6 +531,7 @@ impl GalaxyModel {
                 eccentricity: 0.,
                 arm_count: 2,
                 r_s: 6.97e-16,
+                a_0_mond: 0., // todo
             },
             _ => unimplemented!(), // todo
         }

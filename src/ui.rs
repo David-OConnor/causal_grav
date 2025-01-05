@@ -1,11 +1,7 @@
 use egui::{Color32, Context, RichText, Slider, TopBottomPanel, Ui};
 use graphics::{EngineUpdates, Scene};
 
-use crate::{
-    build,
-    playback::{change_snapshot, SnapShot},
-    State,
-};
+use crate::{build, ForceModel, playback::{change_snapshot, SnapShot}, State};
 
 pub const ROW_SPACING: f32 = 22.;
 pub const COL_SPACING: f32 = 30.;
@@ -92,6 +88,28 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             if state.ui.building {
                 ui.heading(RichText::new("Building...").color(Color32::ORANGE));
             }
+
+            ui.add_space(COL_SPACING);
+
+            ui.radio_value(&mut state.ui.force_model, ForceModel::Newton, "Newton");
+            ui.radio_value(&mut state.ui.force_model, ForceModel::Mond(0.), "Mond");
+            ui.radio_value(&mut state.ui.force_model, ForceModel::GaussShells, "Gaussian shells");
+
+            ui.add_space(COL_SPACING);
+
+            ui.label("DT:");
+            // todo: YOu will have to store this in state.
+            let text_orig = state.ui.dt_input.clone();
+            ui.text_edit_singleline(&mut state.ui.dt_input);
+            if state.ui.dt_input != text_orig {
+                if let Ok(v) = state.ui.dt_input.parse() {
+                    state.config.dt_integration_max = v;
+                    state.ui.dt_input = state.config.dt_integration_max.to_string();
+                }
+            }
+
+
+            // todo: Other params, like DT and gauss ring ratio.
         });
     });
 

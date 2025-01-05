@@ -51,6 +51,9 @@ mod util;
 //
 // Some sort of cumulative drag?? Can we estimate and test this?
 
+// todo: A/R.
+pub const SOFTENING_FACTOR_SQ: f64 = 0.01;
+
 const SNAPSHOT_RATIO: usize = 4;
 
 // Note: Setting this too high is problematic.
@@ -93,8 +96,8 @@ impl Default for Config {
 #[derive(Copy, Clone, PartialEq)]
 pub enum ForceModel {
     Newton,
-    Mond(f64), // inner is a placeholder for a coefficient
-    GaussRings,
+    Mond(f64), // inner is a placeholder for a coefficient. E.g. a_0
+    GaussShells,
 }
 
 impl Default for ForceModel {
@@ -108,6 +111,7 @@ pub struct StateUi {
     snapshot_selected: usize,
     force_model: ForceModel,
     building: bool,
+    dt_input: String,
 }
 
 #[derive(Default)]
@@ -251,7 +255,7 @@ fn build(state: &mut State, force_model: ForceModel) {
 
     for t in 0..state.config.num_timesteps {
         // Create a new set of rays.
-        if force_model == ForceModel::GaussRings && t % state.config.shell_creation_ratio == 0 {
+        if force_model == ForceModel::GaussShells && t % state.config.shell_creation_ratio == 0 {
             for (id, body) in state.bodies.iter().enumerate() {
                 // for _ in 0..state.config.num_rays_per_iter {
                 // state.rays.push(body.create_ray(id));
@@ -274,11 +278,11 @@ fn build(state: &mut State, force_model: ForceModel) {
         let bodies_other = state.bodies.clone(); // todo: I don't like this. Avoids mut error.
 
         let acc = |id, posit| match force_model {
-            ForceModel::Newton => accel::acc_newton(posit, &bodies_other, id),
-            ForceModel::GaussRings => {
+            ForceModel::Newton => accel::acc_newton(posit, &bodies_other, id, None),
+            ForceModel::GaussShells => {
                 accel::calc_acc_shell(&state.shells, posit, id, state.config.gauss_c)
             }
-            ForceModel::Mond(_) => unimplemented!(),
+            ForceModel::Mond(a_0) => accel::acc_newton(posit, &bodies_other, id, Some(a_0)),
         };
 
         // Calculate dt for this step, based on the closest/fastest rel velocity.
@@ -308,7 +312,7 @@ fn build(state: &mut State, force_model: ForceModel) {
         state.time_elapsed += dt_min;
 
         // todo: Is
-        if force_model != ForceModel::GaussRings || state.time_elapsed > integrate_start_t {
+        if force_model != ForceModel::GaussShells || state.time_elapsed > integrate_start_t {
             // Update body motion.
             integrate::integrate_rk4(
                 &mut state.bodies,

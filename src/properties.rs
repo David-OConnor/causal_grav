@@ -71,7 +71,7 @@ pub fn mass_density(bodies: &[Body], center: Vec3, r_max: f64) -> Vec<(f64, f64)
     result
 }
 
-/// Luminosity profile. X: α (arcsec). Y: μ (mag arcsec^-2)
+/// Luminosity profile. X: r (kpc). Y: μ (mag arcsec^-2)
 pub fn luminosity(bodies: &[Body]) -> Vec<(f64, f64)> {
     let mut result = Vec::with_capacity(N_SAMPLE_PTS);
 
