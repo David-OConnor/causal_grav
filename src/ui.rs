@@ -2,6 +2,7 @@ use egui::{Color32, Context, RichText, Slider, TopBottomPanel, Ui};
 use graphics::{EngineUpdates, Scene};
 
 use crate::{build, ForceModel, playback::{change_snapshot, SnapShot}, State};
+use crate::body_creation::GalaxyModel;
 
 pub const ROW_SPACING: f32 = 22.;
 pub const COL_SPACING: f32 = 30.;
@@ -45,7 +46,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             &state.snapshots[state.ui.snapshot_selected]
         };
 
-        ui.spacing_mut().slider_width = ui.available_width() - 240.;
+        ui.spacing_mut().slider_width = ui.available_width() - 280.;
 
         ui.horizontal(|ui| {
             ui.label("Snap:");
@@ -77,7 +78,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
         ui.add_space(ROW_SPACING / 2.);
 
-        force_debug(snapshot, ui);
+        // force_debug(snapshot, ui);
 
         ui.horizontal(|ui| {
             // todo: Prog bar
@@ -92,25 +93,48 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.add_space(COL_SPACING);
 
             ui.radio_value(&mut state.ui.force_model, ForceModel::Newton, "Newton");
-            ui.radio_value(&mut state.ui.force_model, ForceModel::Mond(0.), "Mond");
-            ui.radio_value(&mut state.ui.force_model, ForceModel::GaussShells, "Gaussian shells");
+            // ui.radio_value(&mut state.ui.force_model, ForceModel::Mond(0.), "MOND");
+            ui.radio_value(&mut state.ui.force_model, ForceModel::Mond, "MOND");
+            ui.radio_value(&mut state.ui.force_model, ForceModel::GaussShells, "Causal shells");
 
             ui.add_space(COL_SPACING);
 
-            ui.label("DT:");
-            // todo: YOu will have to store this in state.
-            let text_orig = state.ui.dt_input.clone();
+            // todo: Combo box for Galaxy model;
+            for model in [
+                GalaxyModel::Ngc1560,
+                GalaxyModel::Ngc3198,
+                GalaxyModel::Ngc3115,
+                GalaxyModel::Ngc3031,
+                GalaxyModel::Ngc7331
+            ] {
+                if ui.radio_value(&mut state.ui.galaxy_model, model, model.to_str()).changed() {
+                    state.bodies = state.ui.galaxy_model.make_bodies();
+                    state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
+
+                    state.snapshots = Vec::new();
+                    state.take_snapshot(0., 0.); // Initial snapshot; t=0.
+                };
+            }
+
+            ui.add_space(COL_SPACING);
+
+            ui.checkbox(&mut state.ui.add_halo, "Add halo");
+
+            ui.add_space(COL_SPACING);
+
+            ui.label("dt:");
+            // todo: Width?
             ui.text_edit_singleline(&mut state.ui.dt_input);
-            if state.ui.dt_input != text_orig {
+            if ui.button("Save dt").clicked() {
                 if let Ok(v) = state.ui.dt_input.parse() {
-                    state.config.dt_integration_max = v;
-                    state.ui.dt_input = state.config.dt_integration_max.to_string();
+                    state.config.dt = v;
                 }
             }
 
+            // todo: Other params like ring ratio.
 
-            // todo: Other params, like DT and gauss ring ratio.
         });
+        ui.add_space(ROW_SPACING / 2.);
     });
 
     engine_updates

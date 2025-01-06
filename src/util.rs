@@ -1,3 +1,5 @@
+use crate::{Body, State};
+
 /// This function generates an interpolated value for the given `val` based on the
 /// provided `data`. The `data` is a set of (x, y) pairs, where `x` is the input
 /// and `y` is the corresponding output value.
@@ -31,4 +33,38 @@ pub fn interpolate(data: &[(f64, f64)], val: f64) -> Option<f64> {
     }
 
     None
+}
+
+
+/// Defaults to `Config::dt_integration`, but becomes more precise when
+/// bodies are close. This is a global DT, vice local only for those bodies.
+pub fn calc_dt_dynamic(state: &State, bodies_other: &[Body]) -> f64 {
+    let mut result = state.config.dt_integration_max;
+
+    // todo: Consider cacheing the distances, so this second iteration can be reused.
+    for (id_acted_on, body) in state.bodies.iter().enumerate() {
+        for (i, body_src) in bodies_other.iter().enumerate() {
+            if i == id_acted_on {
+                continue; // self-interaction.
+            }
+
+            let dist = (body_src.posit - body.posit).magnitude();
+            let rel_velocity = (body_src.vel - body.vel).magnitude();
+            let dt = state.config.dynamic_dt_scaler * dist / rel_velocity;
+            if dt < result {
+                result = dt;
+            }
+        }
+    }
+
+    result
+}
+
+
+/// E.g. converting arcseconds to kpc, for galaxy radius.
+pub fn scale_x_axis(data: &[(f64, f64)], scaler: f64) -> Vec<(f64, f64)> {
+    data
+        .iter()
+        .map(|(x, y)| (scaler * x, *y))
+        .collect()
 }

@@ -2,6 +2,8 @@
 
 // todo: Output types A/R. Currently x/y tuples.
 
+// todo: You're mixing kpc (mass) with km/s (rotation velocity)
+
 const N_SAMPLE_PTS: usize = 20;
 
 use lin_alg::f64::Vec3;
@@ -35,7 +37,7 @@ pub fn mass_density(bodies: &[Body], center: Vec3, r_max: f64) -> Vec<(f64, f64)
     let dr = r_max / N_SAMPLE_PTS as f64;
 
     // todo: Fix this. I believe it depends on the model. Determines rho_0.
-    let r0_i = 1;
+    let r0_i = 0;
     let mut rho_0 = 1.;
 
     for i in 0..N_SAMPLE_PTS {
@@ -71,7 +73,7 @@ pub fn mass_density(bodies: &[Body], center: Vec3, r_max: f64) -> Vec<(f64, f64)
     result
 }
 
-/// Luminosity profile. X: r (kpc). Y: μ (mag arcsec^-2)
+/// Luminosity profile. X: r (kpc). Y: μ (mag arcsec^-2) - Surface brightness profile.
 pub fn luminosity(bodies: &[Body]) -> Vec<(f64, f64)> {
     let mut result = Vec::with_capacity(N_SAMPLE_PTS);
 
@@ -185,7 +187,7 @@ pub fn plot_rotation_curve(data: &[(f64, f64)], desc: &str) {
         data,
         "r (kpc)",
         "v / c",
-        &format!("Normalized rotation curve of{desc}"),
+        &format!("Normalized rotation curve of {desc}"),
         "rot_plot",
     );
 }

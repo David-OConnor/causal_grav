@@ -64,6 +64,7 @@ const C: f64 = 40.;
 pub struct Config {
     num_timesteps: usize,
     dt_integration_max: f64,
+    dt: f64, // Fixed.
     /// Lower values here lead to higher precision, and slower time evolution.
     dynamic_dt_scaler: f64,
     shell_creation_ratio: usize,
@@ -73,18 +74,21 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        let dt_integration_max = 0.01;
+        let dt = 5e-5;
         let shell_creation_ratio = 12;
 
+        // Important: Shell spacing is only accurate if using non-dynamic DT.
+
         // In distance: t * d/t = d.
-        let shell_spacing = dt_integration_max * shell_creation_ratio as f64 * C;
+        let shell_spacing = dt * shell_creation_ratio as f64 * C;
 
         Self {
             // num_timesteps: 1_000_000,
             num_timesteps: 10_000,
             // num_timesteps: 1000,
             shell_creation_ratio,
-            dt_integration_max,
+            dt,
+            dt_integration_max:  0.01,
             // dynamic_dt_scaler: 0.01,
             dynamic_dt_scaler: 0.1,
             // num_rays_per_iter: 200,
@@ -96,7 +100,8 @@ impl Default for Config {
 #[derive(Copy, Clone, PartialEq)]
 pub enum ForceModel {
     Newton,
-    Mond(f64), // inner is a placeholder for a coefficient. E.g. a_0
+    // Mond(f64), // inner is a placeholder for a coefficient. E.g. a_0
+    Mond, // inner is a placeholder for a coefficient. E.g. a_0
     GaussShells,
 }
 
@@ -112,6 +117,8 @@ pub struct StateUi {
     force_model: ForceModel,
     building: bool,
     dt_input: String,
+    add_halo: bool, // todo: A/R
+    galaxy_model: GalaxyModel,
 }
 
 #[derive(Default)]
@@ -124,9 +131,6 @@ struct State {
     snapshots: Vec<SnapShot>,
     /// For rendering; separate from snapshots since it's invariant.
     body_masses: Vec<f32>,
-    // /// Defaults to `Config::dt_integration`, but becomes more precise when
-    // /// bodies are close. This is a global DT, vice local only for those bodies.
-    // dt_dynamic: f64,
     time_elapsed: f64,
 }
 
@@ -233,7 +237,7 @@ struct GravShell {
 /// Entry point for computation; rename A/R.
 fn build(state: &mut State, force_model: ForceModel) {
     state.ui.building = true;
-    state.take_snapshot(0., 0.); // Initial snapshot; t=0.
+    println!("Building...");
 
     // Allow gravity shells to propogate to reach a steady state, ideally.
     // todo: make this dynamic
@@ -271,7 +275,7 @@ fn build(state: &mut State, force_model: ForceModel) {
         state.remove_far_shells();
 
         for shell in &mut state.shells {
-            shell.radius += C * state.config.dt_integration_max;
+            shell.radius += C * state.config.dt;
         }
 
         // todo: C+P from integrate, so we can test acc vals.
@@ -282,82 +286,61 @@ fn build(state: &mut State, force_model: ForceModel) {
             ForceModel::GaussShells => {
                 accel::calc_acc_shell(&state.shells, posit, id, state.config.gauss_c)
             }
-            ForceModel::Mond(a_0) => accel::acc_newton(posit, &bodies_other, id, Some(a_0)),
+            // ForceModel::Mond(a_0) => accel::acc_newton(posit, &bodies_other, id, Some(a_0)),
+            ForceModel::Mond => accel::acc_newton(posit, &bodies_other, id, Some(0.,)), // todo: A0
         };
 
         // Calculate dt for this step, based on the closest/fastest rel velocity.
         // This affects motion integration only; not shell creation.
-        // todo: Separate fn
-        let mut dt_min = state.config.dt_integration_max;
-        // todo: Consider cacheing the distances, so this second iteration can be reused.
-        for (id_acted_on, body) in &mut state.bodies.iter_mut().enumerate() {
-            for (i, body_src) in bodies_other.iter().enumerate() {
-                if i == id_acted_on {
-                    continue; // self-interaction.
-                }
-
-                let dist = (body_src.posit - body.posit).magnitude();
-                let rel_velocity = (body_src.vel - body.vel).magnitude();
-                let dt = state.config.dynamic_dt_scaler * dist / rel_velocity;
-                if dt < dt_min {
-                    dt_min = dt;
-                }
-            }
-        }
+        let dt = util::calc_dt_dynamic(state, &bodies_other);
+        // todo: Static DT for now, or shells won't work.
+        // let dt = state.config.dt;
 
         for (id, body) in &mut state.bodies.iter_mut().enumerate() {
             body.accel = acc(id, body.posit);
         }
 
-        state.time_elapsed += dt_min;
+        state.time_elapsed += dt;
 
-        // todo: Is
         if force_model != ForceModel::GaussShells || state.time_elapsed > integrate_start_t {
             // Update body motion.
             integrate::integrate_rk4(
                 &mut state.bodies,
                 &state.shells,
-                dt_min,
+                dt,
                 state.config.gauss_c,
                 force_model,
             );
         }
 
         // Save the current state to a snapshot, for later playback.
-        // Note: This can use a substantial amount of memory.
-
         if t % SNAPSHOT_RATIO == 0 {
-            state.take_snapshot(state.time_elapsed, dt_min);
+            state.take_snapshot(state.time_elapsed, dt);
         }
-        // println!("Shell ct: {:?}", state.shells.len());
     }
 
     state.ui.building = false;
+    println!("Build complete.");
 }
 
 fn main() {
-    println!("Building snapshots...");
     let mut state = State::default();
-    // state.dt_dynamic = state.config.dt_integration; // todo: Integrate this into State::default();
 
-    let model = GalaxyModel::Ngc1560;
-    state.bodies = model.make_bodies();
-
+    state.bodies = state.ui.galaxy_model.make_bodies();
     state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
     state.ui.force_model = ForceModel::Newton;
+    state.ui.dt_input = state.config.dt.to_string();
 
     let fm = state.ui.force_model;
     // todo: Don't auto-build, but we a graphics engine have a prob when we don't.
-    build(&mut state, fm);
+    state.take_snapshot(0., 0.); // Initial snapshot; t=0.
 
     let rotation_curve = properties::rotation_curve(&state.bodies, Vec3::new_zero(), 80., C);
     let mass_density = properties::mass_density(&state.bodies, Vec3::new_zero(), 80.);
 
-    properties::plot_rotation_curve(&rotation_curve, "NGC 3198");
-    properties::plot_mass_density(&mass_density, "NGC 3198");
-
-    println!("Complete. Rendering.");
+    properties::plot_rotation_curve(&rotation_curve, &state.ui.galaxy_model.to_str());
+    properties::plot_mass_density(&mass_density, &state.ui.galaxy_model.to_str());
 
     if let Err(e) = save(&PathBuf::from(DEFAULT_SNAPSHOT_FILE), &state.snapshots) {
         eprintln!("Error saving snapshots: {e}");

@@ -12,7 +12,8 @@ pub fn integrate_rk4(
     let acc = |id, posit| match force_model {
         ForceModel::Newton => accel::acc_newton(posit, &bodies_other, id, None),
         ForceModel::GaussShells => accel::calc_acc_shell(shells, posit, id, gauss_c),
-        ForceModel::Mond(a_0) => accel::acc_newton(posit, &bodies_other, id, Some(a_0)),
+        // ForceModel::Mond(a_0) => accel::acc_newton(posit, &bodies_other, id, Some(a_0)),
+        ForceModel::Mond => accel::acc_newton(posit, &bodies_other, id, Some(0.)), // todo: A0
     };
 
     for (id, body) in bodies.iter_mut().enumerate() {

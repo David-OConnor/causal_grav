@@ -5,7 +5,7 @@ use std::f64::consts::TAU;
 use lin_alg::{f64::Vec3, linspace};
 use rand::Rng;
 
-use crate::{util::interpolate, Body, C};
+use crate::{util::{interpolate, scale_x_axis}, Body, C};
 
 /// Create n bodies, in circular orbit, at equal distances from each other.
 pub fn make_bodies_balanced(num: usize, r: f64, mass_body: f64, mass_central: f64) -> Vec<Body> {
@@ -74,12 +74,11 @@ pub enum GalaxyShape {
 /// todo: We assume a spiral galaxy for now
 pub struct GalaxyDescrip {
     pub shape: GalaxyShape,
-    /// See `properties` for what these units are
+    /// X: r (kpc). Y: Solar masses?
     pub mass_density: Vec<(f64, f64)>,
-    /// r (kpc), v/c
+    /// X: r (kpc). Y: km/s
     pub rotation_curve: Vec<(f64, f64)>,
-    /// r (kpc), mu (mac arcsec^-2)
-    /// todo: Consider removing `luminosity`; unused.
+    /// Luminosity brightness profile. r (kpc), mu (mac arcsec^-2) -
     pub luminosity: Vec<(f64, f64)>,
     // todo: More A/R
     /// 0 means a circle. 1 is fully elongated.
@@ -90,6 +89,9 @@ pub struct GalaxyDescrip {
     pub r_s: f64,
     /// Used in MOND
     pub a_0_mond: f64,
+    pub mass_total: f64,
+    /// M/L_B Used to convert luminosity to mass density. Solar masses / Mu ?
+    pub mass_to_light_ratio: f64,
 }
 
 fn ring_area(r: f64, dr: f64) -> f64 {
@@ -137,9 +139,9 @@ impl GalaxyDescrip {
 
             // todo: Normalize?
             // rho is (normalized) M/L^3. So, M = rho * L^3
-            let bodies_this_r = (1. * rho * ring_volume / mass_per_body) as usize;
+            let bodies_this_r = (100. * rho * ring_volume / mass_per_body) as usize;
 
-            println!("N bodies: {:?}", bodies_this_r);
+            println!("N bodies. r={r}: {:?}", bodies_this_r);
 
             // Multiply by C, because the curve is normalized to C.
             // todo: The fudge factor...
@@ -187,13 +189,29 @@ pub enum GalaxyModel {
     Ngc7331,
 }
 
+impl Default for GalaxyModel {
+    fn default() -> Self {
+        Self::Ngc1560
+    }
+}
+
 impl GalaxyModel {
+    pub fn to_str(&self) -> String {
+        match self {
+            Self::Ngc1560 => "NGC 1560",
+            Self::Ngc3198 => "NGC 3198",
+            Self::Ngc3115 => "NGC 3115",
+            Self::Ngc3031 => "NGC 3031",
+            Self::Ngc7331=> "NGC 7331",
+        }.to_owned()
+    }
+
     pub fn descrip(&self) -> GalaxyDescrip {
         match self {
             /// Ludwig, Figures 3 and 5. todo: Partial/rough
             Self::Ngc1560 => {
                 // These rotation curve values are from Broeils.
-                // X axis is ''. (Arcseconds?
+                // X axis is ''.
                 // todo: Use theta and i? i is always 80. Theta ranges from 20.1 to 22.7
 
                 // Multiply arcsecond measurements by this to get distance (i.e. radius?)
@@ -201,6 +219,7 @@ impl GalaxyModel {
                 // this using two different, equivalent conventions)
                 let α_conv_factor = 0.01455;
 
+                // X: arcsec(''), Y: μ (mag arcsec^2) - surface brightness profile.
                 let luminosity_arcsec = vec![
                     (0.0, 22.27),
                     (2.0, 22.30),
@@ -356,7 +375,7 @@ impl GalaxyModel {
                     (353.0, 26.13),
                 ];
 
-                // X axis: arc sec.
+                // X: arcsec (''). Y: km/s
                 let rot_curve_arcsec = vec![
                     (15., 4.5),
                     (30., 8.4),
@@ -395,6 +414,7 @@ impl GalaxyModel {
                     (570., 76.6),
                 ];
 
+                // X: arcsec (''). Y: km/s
                 let rot_curve_corr_arcsec = vec![
                     (15., 5.0),
                     (30., 8.9),
@@ -433,58 +453,54 @@ impl GalaxyModel {
                     (570., 78.7),
                 ];
 
-                let luminosity: Vec<(f64, f64)> = luminosity_arcsec
-                    .iter()
-                    .map(|(x, y)| (α_conv_factor * x, *y))
-                    .collect();
+                // Convert the x values from arcsec ('') to kpc.
+                let luminosity = scale_x_axis(&luminosity_arcsec, α_conv_factor);
+                let rotation_curve = scale_x_axis(&rot_curve_arcsec, α_conv_factor);
+                let rotation_curve_corr = scale_x_axis(&rot_curve_corr_arcsec, α_conv_factor);
 
-                let rot_curve: Vec<(f64, f64)> = rot_curve_arcsec
-                    .iter()
-                    .map(|(x, y)| (α_conv_factor * x, *y))
-                    .collect();
-                let rot_curve_corr: Vec<(f64, f64)> = rot_curve_corr_arcsec
-                    .iter()
-                    .map(|(x, y)| (α_conv_factor * x, *y))
-                    .collect();
+                // Generate mass density from luminosity; we multiply by a mapping between light
+                // and mass, and convert the tabular data in terms of arcsec^-2, to m.
+
+                let mass_to_light_ratio = 35.; // Broeils.
+
+                // todo: Come back to this; re-examine converting surface brightness to solar luminosity etc.
+                // todo: You are likely missing a step.
+                let mut mass_density = Vec::with_capacity(luminosity.len());
+                for (i, (r, lum)) in luminosity.iter().enumerate() {
+                    // surface brightness profile (μ)
+                    // μ = mag / arcsec^2
+                    // mag = μ * arcsec^2
+                    // todo. Hmm: Why are we then, dividing?
+                    let mut arcsec_sq = luminosity_arcsec[i].0.powi(2);
+                    if arcsec_sq < 1e-14 {
+                        arcsec_sq = 1.; // avoid div by 0. // todo: Kludge
+                    }
+                    mass_density.push((*r, mass_to_light_ratio * r / arcsec_sq))
+                }
+
+                // todo temp
+                for (r, lum) in &luminosity {
+                    println!("R: {r} lum: {lum}");
+                }
+
+                for (r, mass) in &mass_density{
+                    println!("R: {r} mass: {mass}");
+                }
 
                 GalaxyDescrip {
                     shape: GalaxyShape::FlocculentSpiral, // todo ?
-                    mass_density: vec![
-                        (0.01, 1.),
-                        (0.02, 1.),
-                        (0.05, 1.),
-                        (0.10, 1.),
-                        (0.8, 0.8),
-                        (1.0, 0.61),
-                        (3.0, 0.05),
-                        (10.0, 0.0),
-                    ],
-                    rotation_curve: vec![
-                        (0., 0.),
-                        (1., 0.00009),
-                        (2., 0.00013),
-                        (3., 0.00017),
-                        (4., 0.00020),
-                        (5., 0.00022),
-                        (6., 0.00024),
-                        (7., 0.000245),
-                        (8., 0.00025),
-                        (9., 0.000251),
-                        (10., 0.000251),
-                        (11., 0.000252),
-                        (12., 0.000252),
-                    ],
-                    // Broeils. "
-                    // X axis: Arcsec (''). 1'' is 14.5pc at 3.0 Mpc"
-                    // Y axis is mu; mag arcsec^-2
+                    mass_density,
+                    rotation_curve,
                     luminosity,
                     eccentricity: 0.0, // todo temp
                     // eccentricity: 0.18, // Broeils
                     arm_count: 2,
-                    r_s: 1.46e-6,
+                    r_s: 1.46e-6, // todo?
                     // total H mass: 8.2e8 solar masses // Broeils
                     // Total blue luminosity: 3.45e8 solar luminosities // Broeils
                     a_0_mond: 1.21, // Broeils
+                    mass_total: 1.0e10, // todo temp. H mass: 8.2e8 solar masses.,
+                    mass_to_light_ratio,
                 }
             }
             Self::Ngc3198 => GalaxyDescrip {
@@ -522,6 +538,8 @@ impl GalaxyModel {
                 arm_count: 2,
                 r_s: 1.2e-5,
                 a_0_mond: 0., // todo
+                mass_total: 0.,
+                mass_to_light_ratio: 0., // todo
             },
             Self::Ngc3115 => GalaxyDescrip {
                 shape: GalaxyShape::Lenticular,
@@ -532,6 +550,8 @@ impl GalaxyModel {
                 arm_count: 2,
                 r_s: 6.97e-16,
                 a_0_mond: 0., // todo
+                mass_total: 0.,
+                mass_to_light_ratio: 0., // todo
             },
             _ => unimplemented!(), // todo
         }
