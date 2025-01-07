@@ -35,7 +35,6 @@ pub fn interpolate(data: &[(f64, f64)], val: f64) -> Option<f64> {
     None
 }
 
-
 /// Defaults to `Config::dt_integration`, but becomes more precise when
 /// bodies are close. This is a global DT, vice local only for those bodies.
 pub fn calc_dt_dynamic(state: &State, bodies_other: &[Body]) -> f64 {
@@ -60,11 +59,7 @@ pub fn calc_dt_dynamic(state: &State, bodies_other: &[Body]) -> f64 {
     result
 }
 
-
 /// E.g. converting arcseconds to kpc, for galaxy radius.
 pub fn scale_x_axis(data: &[(f64, f64)], scaler: f64) -> Vec<(f64, f64)> {
-    data
-        .iter()
-        .map(|(x, y)| (scaler * x, *y))
-        .collect()
+    data.iter().map(|(x, y)| (scaler * x, *y)).collect()
 }

@@ -16,12 +16,14 @@ use crate::{
 mod accel;
 mod body_creation;
 mod fluid_dynamics;
+mod galaxy_data;
 mod gaussian;
 mod integrate;
 mod playback;
 mod properties;
 mod render;
 mod ui;
+mod units;
 mod util;
 // Shower thought, from looking at this from a first person view: View things from the body's perspective.
 // Can you make of it something like that?
@@ -88,7 +90,7 @@ impl Default for Config {
             // num_timesteps: 1000,
             shell_creation_ratio,
             dt,
-            dt_integration_max:  0.01,
+            dt_integration_max: 0.01,
             // dynamic_dt_scaler: 0.01,
             dynamic_dt_scaler: 0.1,
             // num_rays_per_iter: 200,
@@ -287,7 +289,7 @@ fn build(state: &mut State, force_model: ForceModel) {
                 accel::calc_acc_shell(&state.shells, posit, id, state.config.gauss_c)
             }
             // ForceModel::Mond(a_0) => accel::acc_newton(posit, &bodies_other, id, Some(a_0)),
-            ForceModel::Mond => accel::acc_newton(posit, &bodies_other, id, Some(0.,)), // todo: A0
+            ForceModel::Mond => accel::acc_newton(posit, &bodies_other, id, Some(0.)), // todo: A0
         };
 
         // Calculate dt for this step, based on the closest/fastest rel velocity.

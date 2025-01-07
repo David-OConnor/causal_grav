@@ -1,8 +1,12 @@
 use egui::{Color32, Context, RichText, Slider, TopBottomPanel, Ui};
 use graphics::{EngineUpdates, Scene};
 
-use crate::{build, ForceModel, playback::{change_snapshot, SnapShot}, State};
-use crate::body_creation::GalaxyModel;
+use crate::{
+    body_creation::GalaxyModel,
+    build,
+    playback::{change_snapshot, SnapShot},
+    ForceModel, State,
+};
 
 pub const ROW_SPACING: f32 = 22.;
 pub const COL_SPACING: f32 = 30.;
@@ -95,7 +99,11 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.radio_value(&mut state.ui.force_model, ForceModel::Newton, "Newton");
             // ui.radio_value(&mut state.ui.force_model, ForceModel::Mond(0.), "MOND");
             ui.radio_value(&mut state.ui.force_model, ForceModel::Mond, "MOND");
-            ui.radio_value(&mut state.ui.force_model, ForceModel::GaussShells, "Causal shells");
+            ui.radio_value(
+                &mut state.ui.force_model,
+                ForceModel::GaussShells,
+                "Causal shells",
+            );
 
             ui.add_space(COL_SPACING);
 
@@ -105,9 +113,12 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 GalaxyModel::Ngc3198,
                 GalaxyModel::Ngc3115,
                 GalaxyModel::Ngc3031,
-                GalaxyModel::Ngc7331
+                GalaxyModel::Ngc7331,
             ] {
-                if ui.radio_value(&mut state.ui.galaxy_model, model, model.to_str()).changed() {
+                if ui
+                    .radio_value(&mut state.ui.galaxy_model, model, model.to_str())
+                    .changed()
+                {
                     state.bodies = state.ui.galaxy_model.make_bodies();
                     state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
@@ -132,7 +143,6 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             }
 
             // todo: Other params like ring ratio.
-
         });
         ui.add_space(ROW_SPACING / 2.);
     });

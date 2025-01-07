@@ -4,8 +4,11 @@
 
 use lin_alg::f64::Vec3;
 
-use crate::{gaussian::{GaussianShell, AMP_SCALER}, Body, GravShell, SOFTENING_FACTOR_SQ};
-
+use crate::{
+    gaussian::{GaussianShell, AMP_SCALER},
+    units::{KPC, SOLAR_MASS},
+    Body, GravShell, SOFTENING_FACTOR_SQ,
+};
 // /// Calculate the force acting on a body, given the local environment of gravity shells intersecting it.
 // pub fn acc_shells(
 //     body: &Body,
@@ -22,6 +25,11 @@ use crate::{gaussian::{GaussianShell, AMP_SCALER}, Body, GravShell, SOFTENING_FA
 //
 //     properties.acc_shell
 // }
+
+/// A helper function, where the inputs are precomputed.
+fn acc_newton_simple(acc_dir: Vec3, src_mass: f64, r: f64) -> Vec3 {
+    acc_dir * src_mass / (r.powi(2) + SOFTENING_FACTOR_SQ)
+}
 
 pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, id_acted_on: usize, shell_c: f64) -> Vec3 {
     let mut result = Vec3::new_zero();
@@ -40,11 +48,15 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, id_acted_on: usize, she
             c: shell_c,
         };
 
-        let acc_dir = shell.center - posit;
+        let acc_diff = shell.center - posit;
+        let r = acc_diff.magnitude();
+        let acc_dir = acc_diff / r; // Unit vec
 
-        let acc_mag = acc_dir.magnitude();
+        // todo: Experimenting using our consistent unit system
+        let mass_kg = shell.src_mass * SOLAR_MASS;
+        let r_kpc = r * KPC;
 
-        result += acc_dir * shell.src_mass * gauss.value(posit) / acc_mag.powi(3);
+        result += acc_newton_simple(acc_dir, shell.src_mass * gauss.value(posit), r);
     }
 
     result * AMP_SCALER
@@ -52,7 +64,12 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, id_acted_on: usize, she
 
 /// An instantaneous acceleration computation. Either Newtonian, or Newtonian modified with MOND.
 /// `mond_params` are `(a, a_0)`.
-pub fn acc_newton(posit: Vec3, bodies_other: &[Body], id_acted_on: usize, mond_a0: Option<f64>) -> Vec3 {
+pub fn acc_newton(
+    posit: Vec3,
+    bodies_other: &[Body],
+    id_acted_on: usize,
+    mond_a0: Option<f64>,
+) -> Vec3 {
     let mut result = Vec3::new_zero();
 
     for (i, body_src) in bodies_other.iter().enumerate() {
@@ -60,9 +77,15 @@ pub fn acc_newton(posit: Vec3, bodies_other: &[Body], id_acted_on: usize, mond_a
             continue; // self-interaction.
         }
 
-        let acc_dir = body_src.posit - posit;
+        let acc_diff = body_src.posit - posit;
+        let r = acc_diff.magnitude();
+        let acc_dir = acc_diff / r; // Unit vec
 
-        let mut accel_newton = acc_dir * body_src.mass / (acc_dir.magnitude().powi(3) + SOFTENING_FACTOR_SQ);
+        // result += acc_newton_simple(acc_dir,  body_src.mass, r);
+        // todo: Experimenting using our consistent unit system
+        let mass_kg = body_src.mass * SOLAR_MASS;
+        let r_kpc = r * KPC;
+        result += acc_newton_simple(acc_dir, mass_kg, r_kpc);
 
         // if let Some(a_0) = mond_a0 {
         //     let x = a / a_0;
@@ -71,7 +94,7 @@ pub fn acc_newton(posit: Vec3, bodies_other: &[Body], id_acted_on: usize, mond_a
         //     accel_newton *= μ;
         // }
 
-        result += accel_newton;
+        // result += accel_newton;
     }
 
     if let Some(a_0) = mond_a0 {
@@ -107,7 +130,7 @@ pub fn acc_newton(posit: Vec3, bodies_other: &[Body], id_acted_on: usize, mond_a
 
         // 4) Rescale the direction of the Newtonian acceleration to have magnitude a_mond
         //    That is our final (toy) MOND acceleration vector
-        let scale = a_mond /acc_newton_mag;
+        let scale = a_mond / acc_newton_mag;
 
         return result * scale;
     }
