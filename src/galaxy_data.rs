@@ -280,12 +280,18 @@ pub fn ngc_1560() -> GalaxyDescrip {
     // todo: You really need to QC this!
     let mut lum_total = 0.;
     for (r, lum) in &luminosity {
-        lum_total += lum;
+        if *r < 1e-14 {
+            continue; // todo kludege
+        }
+        lum_total += lum / r.powi(2);
     }
 
     let lum_scaler = mass_total / lum_total;
     for (r, lum) in &luminosity {
-        mass_density.push((*r, lum_scaler * lum));
+        if *r < 1e-14 {
+            continue; // todo kludege
+        }
+        mass_density.push((*r, lum_scaler * lum / r.powi(2)));
     }
 
     // todo temp

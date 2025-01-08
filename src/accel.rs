@@ -6,7 +6,7 @@ use lin_alg::f64::Vec3;
 
 use crate::{
     gaussian::{GaussianShell, AMP_SCALER},
-    units::{KPC, SOLAR_MASS},
+    units::G,
     Body, GravShell, SOFTENING_FACTOR_SQ,
 };
 // /// Calculate the force acting on a body, given the local environment of gravity shells intersecting it.
@@ -28,7 +28,7 @@ use crate::{
 
 /// A helper function, where the inputs are precomputed.
 fn acc_newton_simple(acc_dir: Vec3, src_mass: f64, r: f64) -> Vec3 {
-    acc_dir * src_mass / (r.powi(2) + SOFTENING_FACTOR_SQ)
+    acc_dir * G * src_mass / (r.powi(2) + SOFTENING_FACTOR_SQ)
 }
 
 pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, id_acted_on: usize, shell_c: f64) -> Vec3 {
@@ -53,8 +53,8 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, id_acted_on: usize, she
         let acc_dir = acc_diff / r; // Unit vec
 
         // todo: Experimenting using our consistent unit system
-        let mass_kg = shell.src_mass * SOLAR_MASS;
-        let r_kpc = r * KPC;
+        // let mass_kg = shell.src_mass * SOLAR_MASS;
+        // let r_m = r * KPC;
 
         result += acc_newton_simple(acc_dir, shell.src_mass * gauss.value(posit), r);
     }
@@ -81,11 +81,15 @@ pub fn acc_newton(
         let r = acc_diff.magnitude();
         let acc_dir = acc_diff / r; // Unit vec
 
-        // result += acc_newton_simple(acc_dir,  body_src.mass, r);
+        result += acc_newton_simple(acc_dir, body_src.mass, r);
         // todo: Experimenting using our consistent unit system
-        let mass_kg = body_src.mass * SOLAR_MASS;
-        let r_kpc = r * KPC;
-        result += acc_newton_simple(acc_dir, mass_kg, r_kpc);
+        // let mass_kg = body_src.mass * SOLAR_MASS;
+        // let r_m = r * KPC;
+        // todo:
+        // let mass_kg_e10 = body_src.mass * SOLAR_MASS_E10;
+        // let r_m_e10 = r * KPC_M_E10;
+
+        // result += acc_newton_simple(acc_dir, mass_kg, r_m);
 
         // if let Some(a_0) = mond_a0 {
         //     let x = a / a_0;

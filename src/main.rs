@@ -11,6 +11,7 @@ use crate::{
     gaussian::{COEFF_C, MAX_SHELL_R},
     playback::{save, vec3_to_f32, GravShellSnapshot, SnapShot, DEFAULT_SNAPSHOT_FILE},
     render::render,
+    units::C,
 };
 
 mod accel;
@@ -58,14 +59,10 @@ pub const SOFTENING_FACTOR_SQ: f64 = 0.01;
 
 const SNAPSHOT_RATIO: usize = 4;
 
-// Note: Setting this too high is problematic.
-// todo: Maybe a different time unit?
-// const C: f64 = 9.72e-12; // Rough; kpc/s^2.
-const C: f64 = 40.;
-
 pub struct Config {
     num_timesteps: usize,
     dt_integration_max: f64,
+    /// Unit: MYR
     dt: f64, // Fixed.
     /// Lower values here lead to higher precision, and slower time evolution.
     dynamic_dt_scaler: f64,
@@ -76,7 +73,8 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        let dt = 5e-5;
+        // let dt = 5e-5;
+        let dt = 5e-10;
         let shell_creation_ratio = 12;
 
         // Important: Shell spacing is only accurate if using non-dynamic DT.

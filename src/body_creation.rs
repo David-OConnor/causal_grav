@@ -9,9 +9,9 @@ use rand::Rng;
 
 use crate::{
     galaxy_data,
-    units::ARCSEC_CONV_FACTOR,
+    units::{ARCSEC_CONV_FACTOR, KM_S_TO_KPC_MYR},
     util::{interpolate, scale_x_axis},
-    Body, C,
+    Body,
 };
 
 /// Create n bodies, in circular orbit, at equal distances from each other.
@@ -96,6 +96,7 @@ pub struct GalaxyDescrip {
     pub r_s: f64,
     /// Used in MOND
     pub a_0_mond: f64,
+    /// Solar masses, or solar masses x 10^10?
     pub mass_total: f64,
     /// M/L_B Used to convert luminosity to mass density. Solar masses / Mu ?
     pub mass_to_light_ratio: f64,
@@ -116,7 +117,10 @@ impl GalaxyDescrip {
     /// See the `properties` module for info on distributions
     /// todo: Luminosity A/R
     pub fn make_bodies(&self) -> Vec<Body> {
-        let mut result = Vec::with_capacity(69); // todo
+        // todo: Param?
+        let num_bodies = 90g;
+
+        let mut result = Vec::with_capacity(num_bodies);
         let mut rng = rand::thread_rng();
 
         // todo: Event along rings instead of random?
@@ -131,31 +135,58 @@ impl GalaxyDescrip {
 
         let r_all = linspace(0., r_last, num_rings);
 
-        // todo: Maybe dynamically vary this.
-        // Solar masses (?)
-        let mass_per_body = 6.;
+        // M☉
+        let mass_per_body = self.mass_total / num_bodies as f64;
+
+        // Using "volume" loosely; more like area.
+        // let total_volume = r_last.powi(2) * TAU / 2.;
+
+        // todo: Examien this approach.
+        let mut mass_sample_total = 0.;
+        for r in &r_all {
+            if *r < 1.0e-8 {
+                continue;
+            }
+            mass_sample_total += interpolate(&self.mass_density, *r).unwrap();
+        }
 
         // todo: Split into disc + bulge, among other things.
-        for r in r_all {
+        for r in &r_all {
             // todo: Most of this is a hack.
 
+            if *r < 1.0e-8 {
+                continue;
+            }
+
             // This is ρ/ρ_0.
-            let rho = interpolate(&self.mass_density, r).unwrap();
+            let rho = interpolate(&self.mass_density, *r).unwrap();
 
-            // Calculate
-            let disc_thickness = 30.; // todo: Important question. Disc thickness?
-            let ring_volume = ring_area(r, dr) * disc_thickness;
-            // let circum = TAU * r;
+            let portion = rho / mass_sample_total;
+            let bodies_this_r = (portion * num_bodies as f64) as usize;
 
-            // todo: Normalize?
-            // rho is (normalized) M/L^3. So, M = rho * L^3
-            let bodies_this_r = (0.000000005 * rho * ring_volume / mass_per_body) as usize;
+            // // Calculate
+            // // let disc_thickness = 30.; // todo: Important question. Disc thickness?
+            // let disc_thickness = 1.; // todo: Important question. Disc thickness?
+            // let ring_volume = ring_area(r, dr) * disc_thickness;
+            // // let circum = TAU * r;
+            //
+            // // rho is (normalized) M/L^3. So, M = rho * L^3
+            // // let this_ring_portion = 1. * ring_volume / total_volume;
+            //
+            // // todo: I believe mass total is already scaled; come back to this.
+            // let rho_portion = rho / self.mass_total;
+            //
+            // println!("Rho: {:?}", rho);
+            // println!("Rho portion: {:?}", rho_portion);
+            // // println!("Ring portion: {:?}", this_ring_portion);
+            //
+            // // todo: Rounding errors...
+            // // let bodies_this_r = (rho_portion / this_ring_portion * num_bodies as f64) as usize;
+            //
+            println!("N bodies. r={r}: {:?}. rho: {:?}", bodies_this_r, rho);
 
-            println!("N bodies. r={r}: {:?}", bodies_this_r);
-
-            // Multiply by C, because the curve is normalized to C.
-            // todo: The fudge factor...
-            let v_mag = 1_500. * C * interpolate(&self.rotation_curve, r).unwrap();
+            // Convert from km/s to kpc/myr
+            let v_mag = interpolate(&self.rotation_curve, *r).unwrap() * KM_S_TO_KPC_MYR;
 
             for i in 0..bodies_this_r {
                 // todo: Random, or even? Even is more uniform, which may be nice, but
@@ -184,6 +215,8 @@ impl GalaxyDescrip {
                 })
             }
         }
+
+        println!("Total body count: {:?}", result.len());
 
         result
     }
