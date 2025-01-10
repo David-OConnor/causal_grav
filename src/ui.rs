@@ -134,11 +134,22 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.add_space(COL_SPACING);
 
             ui.label("dt:");
-            // todo: Width?
-            ui.text_edit_singleline(&mut state.ui.dt_input);
+            // ui.text_edit_singleline(&mut state.ui.dt_input);
+            ui.add_sized([60., Ui::available_height(ui)], egui::TextEdit::singleline(&mut state.ui.dt_input));
             if ui.button("Save dt").clicked() {
                 if let Ok(v) = state.ui.dt_input.parse() {
                     state.config.dt = v;
+                }
+            }
+
+            ui.add_space(COL_SPACING);
+
+            ui.label("Steps (x1000):");
+            // todo: Width?
+            let mut val = (state.config.num_timesteps / 1_000).to_string();
+            if ui.add_sized([40., Ui::available_height(ui)], egui::TextEdit::singleline(&mut val)).changed() {
+                if let Ok(v) = val.parse::<usize>() {
+                    state.config.num_timesteps = v * 1_000;
                 }
             }
 

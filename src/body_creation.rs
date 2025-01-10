@@ -9,7 +9,7 @@ use rand::Rng;
 
 use crate::{
     galaxy_data,
-    units::{ARCSEC_CONV_FACTOR, KM_S_TO_KPC_MYR},
+    units::{ARCSEC_CONV_FACTOR, KPC_MYR_PER_KM_S},
     util::{interpolate, scale_x_axis},
     Body,
 };
@@ -94,8 +94,6 @@ pub struct GalaxyDescrip {
     /// Not a fundamental property; used to normalize mass density etc?
     /// todo: I'm not sure what this is
     pub r_s: f64,
-    /// Used in MOND
-    pub a_0_mond: f64,
     /// Solar masses, or solar masses x 10^10?
     pub mass_total: f64,
     /// M/L_B Used to convert luminosity to mass density. Solar masses / Mu ?
@@ -118,7 +116,8 @@ impl GalaxyDescrip {
     /// todo: Luminosity A/R
     pub fn make_bodies(&self) -> Vec<Body> {
         // todo: Param?
-        let num_bodies = 90g;
+        let num_bodies = 130;
+        let num_rings = 16;
 
         let mut result = Vec::with_capacity(num_bodies);
         let mut rng = rand::thread_rng();
@@ -130,18 +129,17 @@ impl GalaxyDescrip {
 
         let r_last = self.mass_density.last().unwrap().0;
 
-        let num_rings = 12;
         let dr = r_last / num_rings as f64;
 
         let r_all = linspace(0., r_last, num_rings);
 
+        // todo: Calc mass-per-body by ring; more, smaller masses farther out for evenness.
         // M☉
-        let mass_per_body = self.mass_total / num_bodies as f64;
+        // let mass_per_body = self.mass_total / num_bodies as f64;
 
         // Using "volume" loosely; more like area.
-        // let total_volume = r_last.powi(2) * TAU / 2.;
+        let total_area = r_last.powi(2) * TAU / 2.;
 
-        // todo: Examien this approach.
         let mut mass_sample_total = 0.;
         for r in &r_all {
             if *r < 1.0e-8 {
@@ -158,35 +156,32 @@ impl GalaxyDescrip {
                 continue;
             }
 
-            // This is ρ/ρ_0.
-            let rho = interpolate(&self.mass_density, *r).unwrap();
+            let mass_this_r = interpolate(&self.mass_density, *r).unwrap();
+            let area_this_r = ring_area(*r, dr);
 
-            let portion = rho / mass_sample_total;
-            let bodies_this_r = (portion * num_bodies as f64) as usize;
+            let area_portion = area_this_r / total_area;
+            // let mass_portion = mass_this_r / mass_sample_total;
 
-            // // Calculate
-            // // let disc_thickness = 30.; // todo: Important question. Disc thickness?
-            // let disc_thickness = 1.; // todo: Important question. Disc thickness?
-            // let ring_volume = ring_area(r, dr) * disc_thickness;
-            // // let circum = TAU * r;
-            //
-            // // rho is (normalized) M/L^3. So, M = rho * L^3
-            // // let this_ring_portion = 1. * ring_volume / total_volume;
-            //
-            // // todo: I believe mass total is already scaled; come back to this.
-            // let rho_portion = rho / self.mass_total;
-            //
-            // println!("Rho: {:?}", rho);
-            // println!("Rho portion: {:?}", rho_portion);
-            // // println!("Ring portion: {:?}", this_ring_portion);
-            //
-            // // todo: Rounding errors...
-            // // let bodies_this_r = (rho_portion / this_ring_portion * num_bodies as f64) as usize;
-            //
-            println!("N bodies. r={r}: {:?}. rho: {:?}", bodies_this_r, rho);
+            // Trying this: Choose number of bodies based on area;
+            let bodies_this_r = (area_portion * num_bodies as f64) as usize;
+
+
+            // let bodies_this_r = (mass_portion * num_bodies as f64) as usize;
+
+            println!("N bodies. r={r}: {:?}. rho: {:?}", bodies_this_r, mass_this_r);
+
+            // M☉
+            let mass_per_body = mass_this_r / bodies_this_r as f64;
 
             // Convert from km/s to kpc/myr
-            let v_mag = interpolate(&self.rotation_curve, *r).unwrap() * KM_S_TO_KPC_MYR;
+            let v_mag = interpolate(&self.rotation_curve, *r).unwrap() * KPC_MYR_PER_KM_S;
+
+            // todo experimenting. It seems the initial v_mag needs to be multiplied by ~2 to
+            // prevent the outer bodies from collapsing in. Note that we expect the opposite result
+            // from a naive Newton rep, without dark matter.
+            let v_mag = v_mag * 2.;
+
+            // let v_mag = 0.;
 
             for i in 0..bodies_this_r {
                 // todo: Random, or even? Even is more uniform, which may be nice, but
@@ -211,12 +206,31 @@ impl GalaxyDescrip {
                     posit,
                     vel,
                     accel: Vec3::new_zero(),
-                    mass: mass_per_body,
+                    mass: mass_per_body
                 })
             }
         }
 
+        // Scale mass to equal our total
+        let mut mass_sum = 0.;
+        for body in &result {
+            mass_sum += body.mass;
+        }
+
+        let mass_scaler = self.mass_total / mass_sum;
+        for body in &mut result {
+            body.mass *= mass_scaler;
+        }
+
+        // This loop is just diagnostic.
+        let mut mass_count = 0.;
+        for body in &mut result {
+            mass_count += body.mass;
+        }
+
         println!("Total body count: {:?}", result.len());
+        println!("Total mass: {:?}", mass_count);
+
 
         result
     }

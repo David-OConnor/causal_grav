@@ -26,6 +26,8 @@ mod render;
 mod ui;
 mod units;
 mod util;
+mod gem;
+mod cdm;
 // Shower thought, from looking at this from a first person view: View things from the body's perspective.
 // Can you make of it something like that?
 
@@ -73,8 +75,8 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        // let dt = 5e-5;
-        let dt = 5e-10;
+        // let dt = 3.0e-8;
+        let dt = 8.0e-4;
         let shell_creation_ratio = 12;
 
         // Important: Shell spacing is only accurate if using non-dynamic DT.
@@ -83,9 +85,7 @@ impl Default for Config {
         let shell_spacing = dt * shell_creation_ratio as f64 * C;
 
         Self {
-            // num_timesteps: 1_000_000,
-            num_timesteps: 10_000,
-            // num_timesteps: 1000,
+            num_timesteps: 5_000,
             shell_creation_ratio,
             dt,
             dt_integration_max: 0.01,
@@ -117,6 +117,7 @@ pub struct StateUi {
     force_model: ForceModel,
     building: bool,
     dt_input: String,
+    // num_timesteps_input: String,
     add_halo: bool, // todo: A/R
     galaxy_model: GalaxyModel,
 }
@@ -282,19 +283,18 @@ fn build(state: &mut State, force_model: ForceModel) {
         let bodies_other = state.bodies.clone(); // todo: I don't like this. Avoids mut error.
 
         let acc = |id, posit| match force_model {
-            ForceModel::Newton => accel::acc_newton(posit, &bodies_other, id, None),
+            ForceModel::Newton => accel::acc_newton(posit, &bodies_other, id, false),
             ForceModel::GaussShells => {
                 accel::calc_acc_shell(&state.shells, posit, id, state.config.gauss_c)
             }
-            // ForceModel::Mond(a_0) => accel::acc_newton(posit, &bodies_other, id, Some(a_0)),
-            ForceModel::Mond => accel::acc_newton(posit, &bodies_other, id, Some(0.)), // todo: A0
+            ForceModel::Mond => accel::acc_newton(posit, &bodies_other, id, true),
         };
 
         // Calculate dt for this step, based on the closest/fastest rel velocity.
         // This affects motion integration only; not shell creation.
-        let dt = util::calc_dt_dynamic(state, &bodies_other);
+        // let dt = util::calc_dt_dynamic(state, &bodies_other);
         // todo: Static DT for now, or shells won't work.
-        // let dt = state.config.dt;
+        let dt = state.config.dt;
 
         for (id, body) in &mut state.bodies.iter_mut().enumerate() {
             body.accel = acc(id, body.posit);
@@ -331,13 +331,14 @@ fn main() {
 
     state.ui.force_model = ForceModel::Newton;
     state.ui.dt_input = state.config.dt.to_string();
+    // state.ui.dt_num_timesteps = state.config.dt.to_string();
 
     let fm = state.ui.force_model;
     // todo: Don't auto-build, but we a graphics engine have a prob when we don't.
     state.take_snapshot(0., 0.); // Initial snapshot; t=0.
 
-    let rotation_curve = properties::rotation_curve(&state.bodies, Vec3::new_zero(), 80., C);
-    let mass_density = properties::mass_density(&state.bodies, Vec3::new_zero(), 80.);
+    let rotation_curve = properties::rotation_curve(&state.bodies, Vec3::new_zero(), C);
+    let mass_density = properties::mass_density(&state.bodies, Vec3::new_zero());
 
     properties::plot_rotation_curve(&rotation_curve, &state.ui.galaxy_model.to_str());
     properties::plot_mass_density(&mass_density, &state.ui.galaxy_model.to_str());

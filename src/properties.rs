@@ -30,9 +30,22 @@ pub fn gravity_potential(bodies: &[Body], center: Vec3, r_max: f64) -> Vec<(f64,
     Vec::new()
 }
 
+fn find_r_max(bodies: &[Body], center: Vec3) -> f64 {
+    let mut result = 0.;
+    for body in bodies {
+        let r = (body.posit - center).magnitude();
+        if r > result {
+            result = r;
+        }
+    }
+    result
+}
+
 /// Normalized mass density. X: r (kpc). Y: ρ/ρ_0
-pub fn mass_density(bodies: &[Body], center: Vec3, r_max: f64) -> Vec<(f64, f64)> {
+pub fn mass_density(bodies: &[Body], center: Vec3) -> Vec<(f64, f64)> {
     let mut result = Vec::with_capacity(N_SAMPLE_PTS);
+
+    let r_max = find_r_max(bodies, center);
 
     let dr = r_max / N_SAMPLE_PTS as f64;
 
@@ -83,17 +96,10 @@ pub fn luminosity(bodies: &[Body]) -> Vec<(f64, f64)> {
 /// Normalized rotation curve. X: r (kpc). Y: V/c
 /// We specify r_max, to avoid calculations involving outliers. But, perhaps should calculate anyway.
 /// todo: In km/s for now, not V/C.
-pub fn rotation_curve(bodies: &[Body], center: Vec3, r_max: f64, c: f64) -> Vec<(f64, f64)> {
+pub fn rotation_curve(bodies: &[Body], center: Vec3, c: f64) -> Vec<(f64, f64)> {
     let mut result = Vec::with_capacity(N_SAMPLE_PTS);
 
-    // // note: You could hard-code range_max for performance reasons.
-    // let mut r_max = 0.;
-    // for body in bodies {
-    //     let r = (body.posit - center).magnitude();
-    //     if r > r_max {
-    //         r_max = r;
-    //     }
-    // }
+    let r_max = find_r_max(bodies, center);
 
     let dr = r_max / N_SAMPLE_PTS as f64;
 
@@ -136,6 +142,11 @@ pub fn plot(data: &[(f64, f64)], x_label: &str, y_label: &str, plot_title: &str,
         .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), x| {
             (min.min(x), max.max(x))
         });
+
+    println!("Data: {:?}", data);
+    println!("X range: {:?}", x_range);
+
+    // let x_range = (0., 10.); // todo temp
 
     let y_range = data
         .iter()

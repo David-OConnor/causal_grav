@@ -295,14 +295,6 @@ pub fn ngc_1560() -> GalaxyDescrip {
     }
 
     // todo temp
-    let mut mass_qc = 0.;
-    for (_, mass) in &mass_density {
-        mass_qc += mass;
-    }
-
-    println!("Mass total QC: {mass_qc}");
-
-    // todo temp
     // for (r, lum) in &luminosity {
     //     println!("R: {r} lum: {lum}");
     // }
@@ -322,7 +314,6 @@ pub fn ngc_1560() -> GalaxyDescrip {
         r_s: 1.46e-6, // todo?
         // total H mass: 8.2e8 solar masses // Broeils
         // Total blue luminosity: 3.45e8 solar luminosities // Broeils
-        a_0_mond: 1.21, // Broeils
         mass_total,
         mass_to_light_ratio,
         dist_from_earth,
@@ -366,7 +357,6 @@ pub fn ngc_3198() -> GalaxyDescrip {
         eccentricity: 0.,
         arm_count: 2,
         r_s: 1.2e-5,
-        a_0_mond: 0., // todo
         mass_total: 0.,
         mass_to_light_ratio: 0.,  // todo
         dist_from_earth: 14_410., // Wikipedia, J2000 epoch
@@ -382,7 +372,6 @@ pub fn ngc_3115() -> GalaxyDescrip {
         eccentricity: 0.,
         arm_count: 2,
         r_s: 6.97e-16,
-        a_0_mond: 0., // todo
         mass_total: 0.,
         mass_to_light_ratio: 0., // todo
         dist_from_earth: 9_700., // Wikipedia, J2000 epoch.

@@ -9,6 +9,7 @@ use crate::{
     units::G,
     Body, GravShell, SOFTENING_FACTOR_SQ,
 };
+use crate::units::A0_MOND;
 // /// Calculate the force acting on a body, given the local environment of gravity shells intersecting it.
 // pub fn acc_shells(
 //     body: &Body,
@@ -27,7 +28,7 @@ use crate::{
 // }
 
 /// A helper function, where the inputs are precomputed.
-fn acc_newton_simple(acc_dir: Vec3, src_mass: f64, r: f64) -> Vec3 {
+fn acc_newton_inner(acc_dir: Vec3, src_mass: f64, r: f64) -> Vec3 {
     acc_dir * G * src_mass / (r.powi(2) + SOFTENING_FACTOR_SQ)
 }
 
@@ -56,10 +57,20 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, id_acted_on: usize, she
         // let mass_kg = shell.src_mass * SOLAR_MASS;
         // let r_m = r * KPC;
 
-        result += acc_newton_simple(acc_dir, shell.src_mass * gauss.value(posit), r);
+        result += acc_newton_inner(acc_dir, shell.src_mass * gauss.value(posit), r);
     }
 
     result * AMP_SCALER
+}
+
+/// Famaey & Binney. More realistic fits than the standard one.
+fn μ_simple(x: f64) -> f64 {
+    x / (1. + x)
+}
+
+/// Sanders & Noordermeer
+fn μ_standard(x: f64) -> f64 {
+    x / (1. + x.powi(2)).sqrt()
 }
 
 /// An instantaneous acceleration computation. Either Newtonian, or Newtonian modified with MOND.
@@ -68,7 +79,7 @@ pub fn acc_newton(
     posit: Vec3,
     bodies_other: &[Body],
     id_acted_on: usize,
-    mond_a0: Option<f64>,
+    mond: bool
 ) -> Vec3 {
     let mut result = Vec3::new_zero();
 
@@ -81,62 +92,14 @@ pub fn acc_newton(
         let r = acc_diff.magnitude();
         let acc_dir = acc_diff / r; // Unit vec
 
-        result += acc_newton_simple(acc_dir, body_src.mass, r);
-        // todo: Experimenting using our consistent unit system
-        // let mass_kg = body_src.mass * SOLAR_MASS;
-        // let r_m = r * KPC;
-        // todo:
-        // let mass_kg_e10 = body_src.mass * SOLAR_MASS_E10;
-        // let r_m_e10 = r * KPC_M_E10;
+        let mut acc = acc_newton_inner(acc_dir, body_src.mass, r);
 
-        // result += acc_newton_simple(acc_dir, mass_kg, r_m);
-
-        // if let Some(a_0) = mond_a0 {
-        //     let x = a / a_0;
-        //     let μ = x / (1. + x.powi(2)).sqrt();
-        //
-        //     accel_newton *= μ;
-        // }
-
-        // result += accel_newton;
-    }
-
-    if let Some(a_0) = mond_a0 {
-        let acc_newton_mag = result.magnitude();
-
-        if acc_newton_mag < 1e-14 {
-            // If it's basically zero, no reason to do anything special
-            return result;
+        if mond {
+            // todo: This may not be correct. r may be the wrong arbgument?
+            acc = acc /  μ_simple(r / A0_MOND)
         }
 
-        fn μ_simple(x: f64) -> f64 {
-            x / (1. + x.powi(2)).sqrt()
-        }
-
-        // todo: QC all this ChatGPT slop.
-        let mut a_mond = acc_newton_mag;
-        // Fixed-point iteration:
-        //   a_{k+1} = aN / mu(a_k/a0)
-        for _ in 0..50 {
-            let x = a_mond / a_0;
-            let mu_val = μ_simple(x);
-            if mu_val.abs() < 1e-30 {
-                break; // avoid division by zero
-            }
-            let new_a = acc_newton_mag / mu_val;
-            // Check for convergence
-            if ((new_a - a_mond).abs() / a_mond) < 1e-12 {
-                a_mond = new_a;
-                break;
-            }
-            a_mond = new_a;
-        }
-
-        // 4) Rescale the direction of the Newtonian acceleration to have magnitude a_mond
-        //    That is our final (toy) MOND acceleration vector
-        let scale = a_mond / acc_newton_mag;
-
-        return result * scale;
+        result += acc;
     }
 
     result

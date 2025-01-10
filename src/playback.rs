@@ -20,9 +20,10 @@ use lin_alg::{
 };
 
 use crate::{
-    render::{BODY_COLOR, BODY_SHINYNESS, BODY_SIZE, SHELL_COLOR},
+    render::{BODY_COLOR, BODY_SHINYNESS, BODY_SIZE_SCALER, SHELL_COLOR},
     GravShell,
 };
+use crate::render::{BODY_SIZE_MAX, BODY_SIZE_MIN};
 
 pub const DEFAULT_SNAPSHOT_FILE: &str = "snapshot.cg";
 
@@ -84,11 +85,14 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
 
     for (i, body_posit_) in snapshot.body_posits.iter().enumerate() {
         let body_posit = Vec3f32_b::new(body_posit_.x, body_posit_.y, body_posit_.z);
+        // println!("Body mass: {:?}. Scaled size: {:?}", body_masses[i], BODY_SIZE_SCALER * body_masses[i]);
+
+        let entity_size = f32::clamp(BODY_SIZE_SCALER * body_masses[i], BODY_SIZE_MIN, BODY_SIZE_MAX);
         entities.push(Entity::new(
             0,
             body_posit,
             Quaternion::new_identity(),
-            f32::min(BODY_SIZE * body_masses[i], 0.7),
+            entity_size,
             BODY_COLOR,
             BODY_SHINYNESS,
         ));
