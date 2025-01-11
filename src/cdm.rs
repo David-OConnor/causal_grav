@@ -9,5 +9,5 @@ pub fn density_burkert(r: f64, rho_0: f64, r_core: f64) -> f64 {
 /// Generate a NFW Halo.
 /// rho_s is the characteristic density. r_csis the characteristic scale.
 pub fn density_nfw(r: f64, rho_s: f64, r_s: f64) -> f64 {
-    rho_s / ((r / r_s) * (1. + r/r_s).powi(2))
+    rho_s / ((r / r_s) * (1. + r / r_s).powi(2))
 }

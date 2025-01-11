@@ -2,25 +2,26 @@
 #![allow(non_ascii_idents)]
 
 use std::path::PathBuf;
+
 use lin_alg::f64::Vec3;
 use rand::Rng;
 
 use crate::{
-    body_creation::GalaxyModel,
+    accel::MondFn,
+    body_creation::{GalaxyDescrip, GalaxyModel},
     gaussian::{COEFF_C, MAX_SHELL_R},
     playback::{save, vec3_to_f32, GravShellSnapshot, SnapShot, DEFAULT_SNAPSHOT_FILE},
     render::render,
-    units::C,
+    units::{A0_MOND, C},
 };
-use crate::accel::MondFn;
-use crate::body_creation::GalaxyDescrip;
-use crate::units::A0_MOND;
 
 mod accel;
 mod body_creation;
+mod cdm;
 mod fluid_dynamics;
 mod galaxy_data;
 mod gaussian;
+mod gem;
 mod integrate;
 mod playback;
 mod properties;
@@ -28,8 +29,6 @@ mod render;
 mod ui;
 mod units;
 mod util;
-mod gem;
-mod cdm;
 // Shower thought, from looking at this from a first person view: View things from the body's perspective.
 // Can you make of it something like that?
 
@@ -347,11 +346,8 @@ fn main() {
     state.bodies = state.ui.galaxy_model.make_bodies();
     state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
-    state.ui.force_model = ForceModel::Newton;
     state.ui.dt_input = state.config.dt.to_string();
-    // state.ui.dt_num_timesteps = state.config.dt.to_string();
 
-    let fm = state.ui.force_model;
     // todo: Don't auto-build, but we a graphics engine have a prob when we don't.
     state.take_snapshot(0., 0.); // Initial snapshot; t=0.
 

@@ -41,9 +41,10 @@ const SOLAR_PER_KG: f64 = 1. / KG_PER_SOLAR; // 1 kg in M☉. M☉/kg
 pub const KPC_MYR_PER_KM_S: f64 = KPC_PER_M * 1_000. / MYR_PER_S; // ~1.022e-3
 
 // Confirmed: https://www.wolframalpha.com/input?i=gravitational+constant+to+kiloparsec%5E3%2F%28solar+mass*megayear%5E2%29&assumption=%22UnitClash%22+-%3E+%7B%22gravitational+constant%22%2C+%7B%22GravitationalConstant%22%2C+%22dflt%22%7D%7D&assumption=%7B%22F%22%2C+%22UnitsConversion2%22%2C+%22fromValue%22%7D+-%3E%221%22
-pub const G: f64 = G_SI * (KPC_PER_M * KPC_PER_M * KPC_PER_M / (SOLAR_PER_KG * MYR_PER_S * MYR_PER_S)); // 4.4984e-12
-                                                                                                // Let's see if we can get 4.3e-3 pc⋅M⊙−1⋅(km/s)2 (The above Wikipedia const) from SI units to validated
-                                                                                                // our approach.
+pub const G: f64 =
+    G_SI * (KPC_PER_M * KPC_PER_M * KPC_PER_M / (SOLAR_PER_KG * MYR_PER_S * MYR_PER_S)); // 4.4984e-12
+                                                                                         // Let's see if we can get 4.3e-3 pc⋅M⊙−1⋅(km/s)2 (The above Wikipedia const) from SI units to validated
+                                                                                         // our approach.
 
 pub const A0_MOND: f64 = 1.2e-10 * KPC_PER_M / (MYR_PER_S * MYR_PER_S); // 3.87e-3
 

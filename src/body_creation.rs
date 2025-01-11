@@ -7,12 +7,7 @@ use std::f64::consts::TAU;
 use lin_alg::{f64::Vec3, linspace};
 use rand::Rng;
 
-use crate::{
-    galaxy_data,
-    units::{ARCSEC_CONV_FACTOR, KPC_MYR_PER_KM_S},
-    util::{interpolate, scale_x_axis},
-    Body,
-};
+use crate::{galaxy_data, units::KPC_MYR_PER_KM_S, util::interpolate, Body};
 
 /// Create n bodies, in circular orbit, at equal distances from each other.
 pub fn make_bodies_balanced(num: usize, r: f64, mass_body: f64, mass_central: f64) -> Vec<Body> {
@@ -76,17 +71,21 @@ pub enum GalaxyShape {
     BarredSpiral,
     Lenticular,
     Elliptical,
+    LenticularRingSeyfertType2,
 }
 
 /// todo: We assume a spiral galaxy for now
 pub struct GalaxyDescrip {
     pub shape: GalaxyShape,
-    /// X: r (kpc). Y: Solar masses?
-    pub mass_density: Vec<(f64, f64)>,
-    /// X: r (kpc). Y: km/s
-    pub rotation_curve: Vec<(f64, f64)>,
+    /// X: r (kpc). Y:  M☉ / kpc^2. (todo: Why not / kpc^3?)
+    pub mass_density_disk: Vec<(f64, f64)>,
+    /// X: r (kpc). Y: km/s. Note: This isn't in our standard units; convert.
+    pub rotation_curve_disk: Vec<(f64, f64)>,
     /// Luminosity brightness profile. r (kpc), mu (mac arcsec^-2) -
-    pub luminosity: Vec<(f64, f64)>,
+    pub luminosity_disk: Vec<(f64, f64)>,
+    pub mass_density_bulge: Vec<(f64, f64)>,
+    pub rotation_curve_bulge: Vec<(f64, f64)>,
+    pub luminosity_bulge: Vec<(f64, f64)>,
     // todo: More A/R
     /// 0 means a circle. 1 is fully elongated.
     pub eccentricity: f64,
@@ -96,8 +95,10 @@ pub struct GalaxyDescrip {
     /// Not a fundamental property; used to normalize mass density etc?
     /// todo: I'm not sure what this is
     pub r_s: f64,
-    /// Solar masses, or solar masses x 10^10?
-    pub mass_total: f64,
+    /// M☉
+    pub mass_bulge: f64,
+    /// M☉
+    pub mass_disk: f64,
     /// M/L_B Used to convert luminosity to mass density. Solar masses / Mu ?
     pub mass_to_light_ratio: f64,
     /// Kpc
@@ -129,7 +130,7 @@ impl GalaxyDescrip {
         // Note: Our distributions tend to be heavily biased towards low r, so if we extend
         // all the way to the end, we will likely leave out lots of values there.
 
-        let r_last = self.mass_density.last().unwrap().0;
+        let r_last = self.mass_density_disk.last().unwrap().0;
 
         let dr = r_last / num_rings as f64;
 
@@ -147,7 +148,7 @@ impl GalaxyDescrip {
             if *r < 1.0e-8 {
                 continue;
             }
-            mass_sample_total += interpolate(&self.mass_density, *r).unwrap();
+            mass_sample_total += interpolate(&self.mass_density_disk, *r).unwrap();
         }
 
         // todo: Split into disc + bulge, among other things.
@@ -158,7 +159,7 @@ impl GalaxyDescrip {
                 continue;
             }
 
-            let mass_this_r = interpolate(&self.mass_density, *r).unwrap();
+            let mass_this_r = interpolate(&self.mass_density_disk, *r).unwrap();
             let area_this_r = ring_area(*r, dr);
 
             let area_portion = area_this_r / total_area;
@@ -167,23 +168,23 @@ impl GalaxyDescrip {
             // Trying this: Choose number of bodies based on area;
             let bodies_this_r = (area_portion * num_bodies as f64) as usize;
 
-
             // let bodies_this_r = (mass_portion * num_bodies as f64) as usize;
 
-            println!("N bodies. r={r}: {:?}. rho: {:?}", bodies_this_r, mass_this_r);
+            println!(
+                "N bodies. r={r}: {:?}. rho: {:?}",
+                bodies_this_r, mass_this_r
+            );
 
             // M☉
             let mass_per_body = mass_this_r / bodies_this_r as f64;
 
             // Convert from km/s to kpc/myr
-            let v_mag = interpolate(&self.rotation_curve, *r).unwrap() * KPC_MYR_PER_KM_S;
+            let v_mag = interpolate(&self.rotation_curve_disk, *r).unwrap() * KPC_MYR_PER_KM_S;
 
             // todo experimenting. It seems the initial v_mag needs to be multiplied by ~2 to
             // prevent the outer bodies from collapsing in. Note that we expect the opposite result
             // from a naive Newton rep, without dark matter.
             // let v_mag = v_mag * 2.;
-
-            let v_mag = 0.;
 
             for i in 0..bodies_this_r {
                 // todo: Random, or even? Even is more uniform, which may be nice, but
@@ -208,7 +209,7 @@ impl GalaxyDescrip {
                     posit,
                     vel,
                     accel: Vec3::new_zero(),
-                    mass: mass_per_body
+                    mass: mass_per_body,
                 })
             }
         }
@@ -219,7 +220,7 @@ impl GalaxyDescrip {
             mass_sum += body.mass;
         }
 
-        let mass_scaler = self.mass_total / mass_sum;
+        let mass_scaler = self.mass_disk / mass_sum;
         for body in &mut result {
             body.mass *= mass_scaler;
         }
@@ -233,7 +234,6 @@ impl GalaxyDescrip {
         println!("Total body count: {:?}", result.len());
         println!("Total mass: {:?}", mass_count);
 
-
         result
     }
 }
@@ -246,6 +246,7 @@ pub enum GalaxyModel {
     Ngc3115,
     Ngc3031,
     Ngc7331,
+    Ngc2685,
 }
 
 impl Default for GalaxyModel {
@@ -262,6 +263,7 @@ impl GalaxyModel {
             Self::Ngc3115 => "NGC 3115",
             Self::Ngc3031 => "NGC 3031",
             Self::Ngc7331 => "NGC 7331",
+            Self::Ngc2685 => "NGC 2685",
         }
         .to_owned()
     }
@@ -272,6 +274,7 @@ impl GalaxyModel {
             Self::Ngc1560 => galaxy_data::ngc_1560(),
             Self::Ngc3198 => galaxy_data::ngc_3198(),
             Self::Ngc3115 => galaxy_data::ngc_3115(),
+            Self::Ngc2685 => galaxy_data::ngc_2685(),
             _ => unimplemented!(), // todo
         }
     }
@@ -282,7 +285,11 @@ impl GalaxyModel {
 }
 
 /// Create mass density from luminosity. X axis for both is r (distance from the galactic center).
-pub fn mass_density_from_lum(luminosity: &[(f64, f64)], mass_total: f64, luminosity_arcsec: &[(f64, f64)]) -> Vec<(f64, f64)> {
+pub fn mass_density_from_lum(
+    luminosity: &[(f64, f64)],
+    mass_total: f64,
+    luminosity_arcsec: &[(f64, f64)],
+) -> Vec<(f64, f64)> {
     // todo: Come back to this; re-examine converting surface brightness to solar luminosity etc.
     // todo: You are likely missing a step.
     let mut mass_density = Vec::with_capacity(luminosity.len());

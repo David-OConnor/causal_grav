@@ -63,3 +63,8 @@ pub fn calc_dt_dynamic(state: &State, bodies_other: &[Body]) -> f64 {
 pub fn scale_x_axis(data: &[(f64, f64)], scaler: f64) -> Vec<(f64, f64)> {
     data.iter().map(|(x, y)| (scaler * x, *y)).collect()
 }
+
+/// Combine separate radius and mass density or velocity data.
+pub fn zip_data(r: &[f64], vals: Vec<f64>) -> Vec<(f64, f64)> {
+    r.iter().copied().zip(vals).collect()
+}

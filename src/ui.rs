@@ -2,12 +2,12 @@ use egui::{Color32, Context, RichText, Slider, TopBottomPanel, Ui};
 use graphics::{EngineUpdates, Scene};
 
 use crate::{
+    accel::MondFn,
     body_creation::GalaxyModel,
     build,
     playback::{change_snapshot, SnapShot},
     ForceModel, State,
 };
-use crate::accel::MondFn;
 
 pub const ROW_SPACING: f32 = 10.;
 pub const COL_SPACING: f32 = 30.;
@@ -44,6 +44,9 @@ fn force_debug(snapshot: &SnapShot, ui: &mut Ui) {
 pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> EngineUpdates {
     let mut engine_updates = EngineUpdates::default();
 
+    // This variable prevents mutliple borrow errors.
+    let mut reset_snapshot = false;
+
     TopBottomPanel::top("0").show(ctx, |ui| {
         let snapshot = if state.snapshots.is_empty() {
             &SnapShot::default()
@@ -64,7 +67,6 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
             if state.ui.snapshot_selected != snapshot_prev {
                 change_snapshot(&mut scene.entities, snapshot, &state.body_masses);
-
                 engine_updates.entities = true;
             }
 
@@ -87,7 +89,10 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
         ui.horizontal(|ui| {
             // todo: Prog bar
-            if ui.button(RichText::new("Build").color(Color32::GOLD)).clicked() {
+            if ui
+                .button(RichText::new("Build").color(Color32::GOLD))
+                .clicked()
+            {
                 build(state, state.ui.force_model);
             }
 
@@ -98,8 +103,16 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.add_space(COL_SPACING);
 
             ui.radio_value(&mut state.ui.force_model, ForceModel::Newton, "Newton");
-            ui.radio_value(&mut state.ui.force_model, ForceModel::Mond(MondFn::Simple), "MOND simple");
-            ui.radio_value(&mut state.ui.force_model, ForceModel::Mond(MondFn::Standard), "MOND");
+            ui.radio_value(
+                &mut state.ui.force_model,
+                ForceModel::Mond(MondFn::Simple),
+                "MOND simple",
+            );
+            ui.radio_value(
+                &mut state.ui.force_model,
+                ForceModel::Mond(MondFn::Standard),
+                "MOND",
+            );
             ui.radio_value(
                 &mut state.ui.force_model,
                 ForceModel::GaussShells,
@@ -109,12 +122,14 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.add_space(COL_SPACING);
 
             // todo: Combo box for Galaxy model;
+            // todo: Populate this as you add data.
             for model in [
                 GalaxyModel::Ngc1560,
                 GalaxyModel::Ngc3198,
-                GalaxyModel::Ngc3115,
-                GalaxyModel::Ngc3031,
-                GalaxyModel::Ngc7331,
+                // GalaxyModel::Ngc3115,
+                // GalaxyModel::Ngc3031,
+                // GalaxyModel::Ngc7331,
+                GalaxyModel::Ngc2685,
             ] {
                 if ui
                     .radio_value(&mut state.ui.galaxy_model, model, model.to_str())
@@ -126,6 +141,9 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
                     state.snapshots = Vec::new();
                     state.take_snapshot(0., 0.); // Initial snapshot; t=0.
+
+                    reset_snapshot = true;
+                    engine_updates.entities = true;
                 };
             }
 
@@ -137,7 +155,10 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
             ui.label("dt:");
             // ui.text_edit_singleline(&mut state.ui.dt_input);
-            ui.add_sized([60., Ui::available_height(ui)], egui::TextEdit::singleline(&mut state.ui.dt_input));
+            ui.add_sized(
+                [60., Ui::available_height(ui)],
+                egui::TextEdit::singleline(&mut state.ui.dt_input),
+            );
             if ui.button("Save dt").clicked() {
                 if let Ok(v) = state.ui.dt_input.parse() {
                     state.config.dt = v;
@@ -149,7 +170,13 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.label("Steps (x1000):");
             // todo: Width?
             let mut val = (state.config.num_timesteps / 1_000).to_string();
-            if ui.add_sized([40., Ui::available_height(ui)], egui::TextEdit::singleline(&mut val)).changed() {
+            if ui
+                .add_sized(
+                    [40., Ui::available_height(ui)],
+                    egui::TextEdit::singleline(&mut val),
+                )
+                .changed()
+            {
                 if let Ok(v) = val.parse::<usize>() {
                     state.config.num_timesteps = v * 1_000;
                 }
@@ -161,7 +188,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
         ui.horizontal(|ui| {
             let desc = &state.ui.galaxy_descrip;
-            ui.label(format!("Mass: {} ×10⁸ M☉", desc.mass_total/1.0e8));
+            ui.label(format!("Mass: {} ×10⁸ M☉", desc.mass_disk / 1.0e8));
             ui.add_space(COL_SPACING);
             ui.label(format!("M/L: {}", desc.mass_to_light_ratio)); // todo: Remove A/R
             ui.add_space(COL_SPACING);
@@ -173,6 +200,10 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
         ui.add_space(ROW_SPACING);
     });
+
+    if reset_snapshot {
+        change_snapshot(&mut scene.entities, &state.snapshots[0], &state.body_masses);
+    }
 
     engine_updates
 }

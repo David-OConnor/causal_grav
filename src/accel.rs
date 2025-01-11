@@ -6,10 +6,9 @@ use lin_alg::f64::Vec3;
 
 use crate::{
     gaussian::{GaussianShell, AMP_SCALER},
-    units::G,
+    units::{A0_MOND, G},
     Body, GravShell, SOFTENING_FACTOR_SQ,
 };
-use crate::units::A0_MOND;
 // /// Calculate the force acting on a body, given the local environment of gravity shells intersecting it.
 // pub fn acc_shells(
 //     body: &Body,
@@ -68,19 +67,17 @@ pub enum MondFn {
     /// Famaey & Binney. More realistic fits than the standard one. `x` is a_Newton / a_0.
     Simple,
     /// Sanders & Noordermeer. `x` is a_Newton / a_0.
-    Standard
+    Standard,
 }
 
 impl MondFn {
     pub fn μ(&self, x: f64) -> f64 {
         match self {
             Self::Simple => x / (1. + x),
-            Self::Standard => x / (1. + x.powi(2)).sqrt()
+            Self::Standard => x / (1. + x.powi(2)).sqrt(),
         }
-
     }
 }
-
 
 /// An instantaneous acceleration computation. Either Newtonian, or Newtonian modified with MOND.
 /// `mond_params` are `(a, a_0)`.
@@ -107,7 +104,7 @@ pub fn acc_newton(
             // todo: This may not be correct. r may be the wrong arbgument?
             // todo: Also, div/0 error.
             let x = acc.magnitude() / A0_MOND;
-            acc = acc /  mond_fn.μ(x)
+            acc = acc / mond_fn.μ(x)
         }
 
         result += acc;
