@@ -5,6 +5,7 @@ use crate::{
     units::ARCSEC_CONV_FACTOR,
     util::scale_x_axis,
 };
+use crate::body_creation::mass_density_from_lum;
 
 pub fn ngc_1560() -> GalaxyDescrip {
     // These rotation curve values are from Broeils.
@@ -246,6 +247,7 @@ pub fn ngc_1560() -> GalaxyDescrip {
     ];
 
     let dist_from_earth = 2_990.; // Wikipedia, J2000 epoch, converted from Mly.
+    let dist_from_earth = 3_270.; // Jacobs et al. (2009)
 
     // Convert the x values from arcsec ('') to kpc.
     let α_conv_factor = ARCSEC_CONV_FACTOR * dist_from_earth;
@@ -254,54 +256,14 @@ pub fn ngc_1560() -> GalaxyDescrip {
     let rotation_curve_corr = scale_x_axis(&rot_curve_corr_arcsec, α_conv_factor);
 
     // solar masses
-    let mass_total = 1.2e10; // todo temp. H mass: 8.2e8 solar masses.
+    let mass_total = 1.2e10; // H mass: 8.2e8 solar masses.
 
     // Generate mass density from luminosity; we multiply by a mapping between light
     // and mass, and convert the tabular data in terms of arcsec^-2, to m.
 
     let mass_to_light_ratio = 35.; // Broeils.
 
-    // todo: Come back to this; re-examine converting surface brightness to solar luminosity etc.
-    // todo: You are likely missing a step.
-    let mut mass_density = Vec::with_capacity(luminosity.len());
-    for (i, (r, lum)) in luminosity.iter().enumerate() {
-        // surface brightness profile (μ)
-        // μ = mag / arcsec^2
-        // mag = μ * arcsec^2
-        // todo. Hmm: Why are we then, dividing?
-        let mut arcsec_sq = luminosity_arcsec[i].0.powi(2);
-        if arcsec_sq < 1e-14 {
-            arcsec_sq = 1.; // avoid div by 0. // todo: Kludge
-        }
-        // mass_density.push((*r, mass_to_light_ratio * r / arcsec_sq))
-    }
-
-    // Let's try a simple technique where, to find mass density, we scale luminosity by the total mass.
-    // todo: You really need to QC this!
-    let mut lum_total = 0.;
-    for (r, lum) in &luminosity {
-        if *r < 1e-14 {
-            continue; // todo kludege
-        }
-        lum_total += lum / r.powi(2);
-    }
-
-    let lum_scaler = mass_total / lum_total;
-    for (r, lum) in &luminosity {
-        if *r < 1e-14 {
-            continue; // todo kludege
-        }
-        mass_density.push((*r, lum_scaler * lum / r.powi(2)));
-    }
-
-    // todo temp
-    // for (r, lum) in &luminosity {
-    //     println!("R: {r} lum: {lum}");
-    // }
-
-    // for (r, mass) in &mass_density{
-    //     println!("R: {r} mass: {mass}");
-    // }
+    let mass_density = mass_density_from_lum(&luminosity, mass_total, &luminosity_arcsec);
 
     GalaxyDescrip {
         shape: GalaxyShape::FlocculentSpiral, // todo ?
@@ -311,12 +273,15 @@ pub fn ngc_1560() -> GalaxyDescrip {
         eccentricity: 0.0, // todo temp
         // eccentricity: 0.18, // Broeils
         arm_count: 2,
-        r_s: 1.46e-6, // todo?
+        // Gentile (2024), section 6. Note: s_0 is 0.8e-24 g/cm^3.
+        burkert_params: (5.6, 1.182e7),
+        r_s: 1.46e-6, // todo? For nfw Halo?
         // total H mass: 8.2e8 solar masses // Broeils
         // Total blue luminosity: 3.45e8 solar luminosities // Broeils
         mass_total,
         mass_to_light_ratio,
         dist_from_earth,
+
         // gas-to-blue luminosity ratio
         //M_HI / L_B = 2.4
     }
@@ -356,6 +321,7 @@ pub fn ngc_3198() -> GalaxyDescrip {
         luminosity: vec![],
         eccentricity: 0.,
         arm_count: 2,
+        burkert_params: (0., 0.),
         r_s: 1.2e-5,
         mass_total: 0.,
         mass_to_light_ratio: 0.,  // todo
@@ -371,6 +337,7 @@ pub fn ngc_3115() -> GalaxyDescrip {
         luminosity: vec![],
         eccentricity: 0.,
         arm_count: 2,
+        burkert_params: (0., 0.),
         r_s: 6.97e-16,
         mass_total: 0.,
         mass_to_light_ratio: 0., // todo

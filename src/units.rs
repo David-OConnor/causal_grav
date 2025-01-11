@@ -45,7 +45,7 @@ pub const G: f64 = G_SI * (KPC_PER_M * KPC_PER_M * KPC_PER_M / (SOLAR_PER_KG * M
                                                                                                 // Let's see if we can get 4.3e-3 pc⋅M⊙−1⋅(km/s)2 (The above Wikipedia const) from SI units to validated
                                                                                                 // our approach.
 
-pub const A0_MOND: f64 = 1.2e-10 * KPC_PER_M / (MYR_PER_S * MYR_PER_S);
+pub const A0_MOND: f64 = 1.2e-10 * KPC_PER_M / (MYR_PER_S * MYR_PER_S); // 3.87e-3
 
 // Note: Setting this too high is problematic.
 // todo: Maybe a different time unit?

@@ -2,7 +2,6 @@
 #![allow(non_ascii_idents)]
 
 use std::path::PathBuf;
-
 use lin_alg::f64::Vec3;
 use rand::Rng;
 
@@ -13,6 +12,8 @@ use crate::{
     render::render,
     units::C,
 };
+use crate::body_creation::GalaxyDescrip;
+use crate::units::A0_MOND;
 
 mod accel;
 mod body_creation;
@@ -111,7 +112,6 @@ impl Default for ForceModel {
     }
 }
 
-#[derive(Default)]
 pub struct StateUi {
     snapshot_selected: usize,
     force_model: ForceModel,
@@ -120,6 +120,24 @@ pub struct StateUi {
     // num_timesteps_input: String,
     add_halo: bool, // todo: A/R
     galaxy_model: GalaxyModel,
+    /// For display in the UI. cached.
+    galaxy_descrip: GalaxyDescrip,
+}
+
+impl Default for StateUi {
+    fn default() -> Self {
+        let galaxy_model = Default::default();
+
+        Self {
+            snapshot_selected: Default::default(),
+            force_model: Default::default(),
+            building: Default::default(),
+            dt_input: Default::default(),
+            add_halo: Default::default(),
+            galaxy_model,
+            galaxy_descrip: galaxy_model.descrip(),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -346,6 +364,8 @@ fn main() {
     if let Err(e) = save(&PathBuf::from(DEFAULT_SNAPSHOT_FILE), &state.snapshots) {
         eprintln!("Error saving snapshots: {e}");
     }
+
+    println!("a_0 (MOND): {:?}", A0_MOND);
 
     render(state);
 }

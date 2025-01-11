@@ -120,6 +120,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                     .changed()
                 {
                     state.bodies = state.ui.galaxy_model.make_bodies();
+                    state.ui.galaxy_descrip = model.descrip();
                     state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
                     state.snapshots = Vec::new();
@@ -155,6 +156,18 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
             // todo: Other params like ring ratio.
         });
+        ui.add_space(ROW_SPACING / 2.);
+
+        ui.horizontal(|ui| {
+            let desc = &state.ui.galaxy_descrip;
+            ui.label(format!("Mass: {} ×10⁸ M☉", desc.mass_total/1.0e8));
+            ui.add_space(COL_SPACING);
+            ui.label(format!("M/L: {}", desc.mass_to_light_ratio)); // todo: Remove A/R
+            ui.add_space(COL_SPACING);
+            ui.label(format!("Dist: {} kpc", desc.dist_from_earth));
+            ui.add_space(COL_SPACING);
+        });
+
         ui.add_space(ROW_SPACING / 2.);
     });
 

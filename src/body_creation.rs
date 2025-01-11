@@ -91,6 +91,8 @@ pub struct GalaxyDescrip {
     /// 0 means a circle. 1 is fully elongated.
     pub eccentricity: f64,
     pub arm_count: usize,
+    /// For generating a dark matter halo. (core radius, central density)
+    pub burkert_params: (f64, f64),
     /// Not a fundamental property; used to normalize mass density etc?
     /// todo: I'm not sure what this is
     pub r_s: f64,
@@ -179,9 +181,9 @@ impl GalaxyDescrip {
             // todo experimenting. It seems the initial v_mag needs to be multiplied by ~2 to
             // prevent the outer bodies from collapsing in. Note that we expect the opposite result
             // from a naive Newton rep, without dark matter.
-            let v_mag = v_mag * 2.;
+            // let v_mag = v_mag * 2.;
 
-            // let v_mag = 0.;
+            let v_mag = 0.;
 
             for i in 0..bodies_this_r {
                 // todo: Random, or even? Even is more uniform, which may be nice, but
@@ -277,4 +279,51 @@ impl GalaxyModel {
     pub fn make_bodies(&self) -> Vec<Body> {
         self.descrip().make_bodies()
     }
+}
+
+/// Create mass density from luminosity. X axis for both is r (distance from the galactic center).
+pub fn mass_density_from_lum(luminosity: &[(f64, f64)], mass_total: f64, luminosity_arcsec: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    // todo: Come back to this; re-examine converting surface brightness to solar luminosity etc.
+    // todo: You are likely missing a step.
+    let mut mass_density = Vec::with_capacity(luminosity.len());
+    for (i, (r, lum)) in luminosity.iter().enumerate() {
+        // surface brightness profile (μ)
+        // μ = mag / arcsec^2
+        // mag = μ * arcsec^2
+        // todo. Hmm: Why are we then, dividing?
+        let mut arcsec_sq = luminosity_arcsec[i].0.powi(2);
+        if arcsec_sq < 1e-14 {
+            arcsec_sq = 1.; // avoid div by 0. // todo: Kludge
+        }
+        // mass_density.push((*r, mass_to_light_ratio * r / arcsec_sq))
+    }
+
+    // Let's try a simple technique where, to find mass density, we scale luminosity by the total mass.
+    // todo: You really need to QC this!
+    let mut lum_total = 0.;
+    for (r, lum) in luminosity {
+        if *r < 1e-14 {
+            continue; // todo kludege
+        }
+        lum_total += lum / r.powi(2);
+    }
+
+    let lum_scaler = mass_total / lum_total;
+    for (r, lum) in luminosity {
+        if *r < 1e-14 {
+            continue; // todo kludege
+        }
+        mass_density.push((*r, lum_scaler * lum / r.powi(2)));
+    }
+
+    // todo temp
+    // for (r, lum) in &luminosity {
+    //     println!("R: {r} lum: {lum}");
+    // }
+
+    // for (r, mass) in &mass_density{
+    //     println!("R: {r} mass: {mass}");
+    // }
+
+    mass_density
 }

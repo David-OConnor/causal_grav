@@ -63,12 +63,12 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, id_acted_on: usize, she
     result * AMP_SCALER
 }
 
-/// Famaey & Binney. More realistic fits than the standard one.
+/// Famaey & Binney. More realistic fits than the standard one. `x` is a_Newton / a_0.
 fn μ_simple(x: f64) -> f64 {
     x / (1. + x)
 }
 
-/// Sanders & Noordermeer
+/// Sanders & Noordermeer. `x` is a_Newton / a_0.
 fn μ_standard(x: f64) -> f64 {
     x / (1. + x.powi(2)).sqrt()
 }
@@ -96,7 +96,9 @@ pub fn acc_newton(
 
         if mond {
             // todo: This may not be correct. r may be the wrong arbgument?
-            acc = acc /  μ_simple(r / A0_MOND)
+            // todo: Also, div/0 error.
+            let x = acc.magnitude() / A0_MOND;
+            acc = acc /  μ_simple(x)
         }
 
         result += acc;
