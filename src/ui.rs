@@ -125,11 +125,12 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             // todo: Populate this as you add data.
             for model in [
                 GalaxyModel::Ngc1560,
-                GalaxyModel::Ngc3198,
+                // GalaxyModel::Ngc3198,
                 // GalaxyModel::Ngc3115,
                 // GalaxyModel::Ngc3031,
                 // GalaxyModel::Ngc7331,
                 GalaxyModel::Ngc2685,
+                GalaxyModel::Ngc2824,
             ] {
                 if ui
                     .radio_value(&mut state.ui.galaxy_model, model, model.to_str())

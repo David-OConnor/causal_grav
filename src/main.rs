@@ -77,7 +77,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         // let dt = 3.0e-8;
-        let dt = 8.0e-4;
+        let dt = 8.0e-3;
         let shell_creation_ratio = 12;
 
         // Important: Shell spacing is only accurate if using non-dynamic DT.

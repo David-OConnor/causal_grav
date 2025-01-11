@@ -247,6 +247,7 @@ pub enum GalaxyModel {
     Ngc3031,
     Ngc7331,
     Ngc2685,
+    Ngc2824,
 }
 
 impl Default for GalaxyModel {
@@ -264,6 +265,7 @@ impl GalaxyModel {
             Self::Ngc3031 => "NGC 3031",
             Self::Ngc7331 => "NGC 7331",
             Self::Ngc2685 => "NGC 2685",
+            Self::Ngc2824 => "NGC 2824",
         }
         .to_owned()
     }
@@ -275,6 +277,7 @@ impl GalaxyModel {
             Self::Ngc3198 => galaxy_data::ngc_3198(),
             Self::Ngc3115 => galaxy_data::ngc_3115(),
             Self::Ngc2685 => galaxy_data::ngc_2685(),
+            Self::Ngc2824 => galaxy_data::ngc_2824(),
             _ => unimplemented!(), // todo
         }
     }
