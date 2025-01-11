@@ -12,6 +12,7 @@ use crate::{
     render::render,
     units::C,
 };
+use crate::accel::MondFn;
 use crate::body_creation::GalaxyDescrip;
 use crate::units::A0_MOND;
 
@@ -101,8 +102,7 @@ impl Default for Config {
 #[derive(Copy, Clone, PartialEq)]
 pub enum ForceModel {
     Newton,
-    // Mond(f64), // inner is a placeholder for a coefficient. E.g. a_0
-    Mond, // inner is a placeholder for a coefficient. E.g. a_0
+    Mond(MondFn),
     GaussShells,
 }
 
@@ -301,11 +301,11 @@ fn build(state: &mut State, force_model: ForceModel) {
         let bodies_other = state.bodies.clone(); // todo: I don't like this. Avoids mut error.
 
         let acc = |id, posit| match force_model {
-            ForceModel::Newton => accel::acc_newton(posit, &bodies_other, id, false),
+            ForceModel::Newton => accel::acc_newton(posit, &bodies_other, id, None),
             ForceModel::GaussShells => {
                 accel::calc_acc_shell(&state.shells, posit, id, state.config.gauss_c)
             }
-            ForceModel::Mond => accel::acc_newton(posit, &bodies_other, id, true),
+            ForceModel::Mond(mond_fn) => accel::acc_newton(posit, &bodies_other, id, Some(mond_fn)),
         };
 
         // Calculate dt for this step, based on the closest/fastest rel velocity.

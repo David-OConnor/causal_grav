@@ -272,7 +272,7 @@ pub fn ngc_1560() -> GalaxyDescrip {
         luminosity,
         eccentricity: 0.0, // todo temp
         // eccentricity: 0.18, // Broeils
-        arm_count: 2,
+        arm_count: 0,
         // Gentile (2024), section 6. Note: s_0 is 0.8e-24 g/cm^3.
         burkert_params: (5.6, 1.182e7),
         r_s: 1.46e-6, // todo? For nfw Halo?
@@ -288,44 +288,31 @@ pub fn ngc_1560() -> GalaxyDescrip {
 }
 
 pub fn ngc_3198() -> GalaxyDescrip {
+    let dist_from_earth = 47_000.;
+
+    // Convert the x values from arcsec ('') to kpc.
+    let α_conv_factor = ARCSEC_CONV_FACTOR * dist_from_earth;
+
+    let rotation_curve = vec![];
+
+    let luminosity = vec![];
+
+    let mass_density = vec![
+
+    ];
+
     GalaxyDescrip {
         shape: GalaxyShape::BarredSpiral,
-        mass_density: vec![
-            (0.1, 1.),
-            (0.2, 0.95),
-            (0.5, 0.6),
-            (1.0, 0.38),
-            (3.0, 0.1),
-            (5.0, 0.07),
-            (7.0, 0.03),
-            (10.0, 0.008),
-        ],
-        rotation_curve: vec![
-            (0., 0.),
-            (2., 0.00035),
-            (4., 0.00045),
-            (6., 0.00048),
-            (8., 0.00051),
-            (10., 0.00050),
-            (12., 0.00049),
-            (14., 0.00049),
-            (16., 0.00049),
-            (18., 0.00048),
-            (20., 0.00048),
-            (22., 0.00048),
-            (24., 0.00047),
-            (26., 0.00048),
-            (28., 0.00049),
-            (30., 0.00049),
-        ],
-        luminosity: vec![],
+        mass_density,
+        rotation_curve,
+        luminosity,
         eccentricity: 0.,
-        arm_count: 2,
+        arm_count: 0,
         burkert_params: (0., 0.),
         r_s: 1.2e-5,
         mass_total: 0.,
         mass_to_light_ratio: 0.,  // todo
-        dist_from_earth: 14_410., // Wikipedia, J2000 epoch
+        dist_from_earth,
     }
 }
 

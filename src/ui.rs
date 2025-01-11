@@ -7,8 +7,9 @@ use crate::{
     playback::{change_snapshot, SnapShot},
     ForceModel, State,
 };
+use crate::accel::MondFn;
 
-pub const ROW_SPACING: f32 = 22.;
+pub const ROW_SPACING: f32 = 10.;
 pub const COL_SPACING: f32 = 30.;
 
 fn force_debug(snapshot: &SnapShot, ui: &mut Ui) {
@@ -80,13 +81,13 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             }
         });
 
-        ui.add_space(ROW_SPACING / 2.);
+        ui.add_space(ROW_SPACING);
 
         // force_debug(snapshot, ui);
 
         ui.horizontal(|ui| {
             // todo: Prog bar
-            if ui.button("Build").clicked() {
+            if ui.button(RichText::new("Build").color(Color32::GOLD)).clicked() {
                 build(state, state.ui.force_model);
             }
 
@@ -97,8 +98,8 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.add_space(COL_SPACING);
 
             ui.radio_value(&mut state.ui.force_model, ForceModel::Newton, "Newton");
-            // ui.radio_value(&mut state.ui.force_model, ForceModel::Mond(0.), "MOND");
-            ui.radio_value(&mut state.ui.force_model, ForceModel::Mond, "MOND");
+            ui.radio_value(&mut state.ui.force_model, ForceModel::Mond(MondFn::Simple), "MOND simple");
+            ui.radio_value(&mut state.ui.force_model, ForceModel::Mond(MondFn::Standard), "MOND");
             ui.radio_value(
                 &mut state.ui.force_model,
                 ForceModel::GaussShells,
@@ -156,7 +157,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
             // todo: Other params like ring ratio.
         });
-        ui.add_space(ROW_SPACING / 2.);
+        ui.add_space(ROW_SPACING);
 
         ui.horizontal(|ui| {
             let desc = &state.ui.galaxy_descrip;
@@ -166,9 +167,11 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.add_space(COL_SPACING);
             ui.label(format!("Dist: {} kpc", desc.dist_from_earth));
             ui.add_space(COL_SPACING);
+            ui.label(format!("Eccentricity: {}", desc.eccentricity));
+            ui.add_space(COL_SPACING);
         });
 
-        ui.add_space(ROW_SPACING / 2.);
+        ui.add_space(ROW_SPACING);
     });
 
     engine_updates

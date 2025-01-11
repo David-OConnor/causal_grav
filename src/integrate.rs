@@ -10,9 +10,9 @@ pub fn integrate_rk4(
     let bodies_other = bodies.to_owned(); // todo: I don't like this. Avoids mut error.
 
     let acc = |id, posit| match force_model {
-        ForceModel::Newton => accel::acc_newton(posit, &bodies_other, id, false),
+        ForceModel::Newton => accel::acc_newton(posit, &bodies_other, id, None),
         ForceModel::GaussShells => accel::calc_acc_shell(shells, posit, id, gauss_c),
-        ForceModel::Mond => accel::acc_newton(posit, &bodies_other, id, true),
+        ForceModel::Mond(mond_fn) => accel::acc_newton(posit, &bodies_other, id, Some(mond_fn)),
     };
 
     for (id, body) in bodies.iter_mut().enumerate() {

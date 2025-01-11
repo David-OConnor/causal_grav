@@ -63,15 +63,24 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, id_acted_on: usize, she
     result * AMP_SCALER
 }
 
-/// Famaey & Binney. More realistic fits than the standard one. `x` is a_Newton / a_0.
-fn μ_simple(x: f64) -> f64 {
-    x / (1. + x)
+#[derive(Clone, Copy, PartialEq)]
+pub enum MondFn {
+    /// Famaey & Binney. More realistic fits than the standard one. `x` is a_Newton / a_0.
+    Simple,
+    /// Sanders & Noordermeer. `x` is a_Newton / a_0.
+    Standard
 }
 
-/// Sanders & Noordermeer. `x` is a_Newton / a_0.
-fn μ_standard(x: f64) -> f64 {
-    x / (1. + x.powi(2)).sqrt()
+impl MondFn {
+    pub fn μ(&self, x: f64) -> f64 {
+        match self {
+            Self::Simple => x / (1. + x),
+            Self::Standard => x / (1. + x.powi(2)).sqrt()
+        }
+
+    }
 }
+
 
 /// An instantaneous acceleration computation. Either Newtonian, or Newtonian modified with MOND.
 /// `mond_params` are `(a, a_0)`.
@@ -79,7 +88,7 @@ pub fn acc_newton(
     posit: Vec3,
     bodies_other: &[Body],
     id_acted_on: usize,
-    mond: bool
+    mond: Option<MondFn>,
 ) -> Vec3 {
     let mut result = Vec3::new_zero();
 
@@ -94,11 +103,11 @@ pub fn acc_newton(
 
         let mut acc = acc_newton_inner(acc_dir, body_src.mass, r);
 
-        if mond {
+        if let Some(mond_fn) = mond {
             // todo: This may not be correct. r may be the wrong arbgument?
             // todo: Also, div/0 error.
             let x = acc.magnitude() / A0_MOND;
-            acc = acc /  μ_simple(x)
+            acc = acc /  mond_fn.μ(x)
         }
 
         result += acc;
