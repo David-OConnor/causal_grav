@@ -19,6 +19,7 @@ mod accel;
 mod body_creation;
 mod cdm;
 mod fluid_dynamics;
+mod fmm;
 mod galaxy_data;
 mod gaussian;
 mod gem;
@@ -29,6 +30,7 @@ mod render;
 mod ui;
 mod units;
 mod util;
+
 // Shower thought, from looking at this from a first person view: View things from the body's perspective.
 // Can you make of it something like that?
 
@@ -72,12 +74,17 @@ pub struct Config {
     shell_creation_ratio: usize,
     // num_rays_per_iter: usize,
     gauss_c: f64,
+    num_bodies_disk: usize, // todo: You may, in the future, not make this a constant.
+    num_bodies_bulge: usize, // todo: You may, in the future, not make this a constant.
+    /// When placing bodies.
+    num_rings_disk: usize, // todo: You may, in the future, not make this a constant.
+    num_rings_bulge: usize, // todo: You may, in the future, not make this a constant.
 }
 
 impl Default for Config {
     fn default() -> Self {
         // let dt = 3.0e-8;
-        let dt = 8.0e-3;
+        let dt = 2.0e-3;
         let shell_creation_ratio = 12;
 
         // Important: Shell spacing is only accurate if using non-dynamic DT.
@@ -94,6 +101,10 @@ impl Default for Config {
             dynamic_dt_scaler: 0.1,
             // num_rays_per_iter: 200,
             gauss_c: shell_spacing * COEFF_C,
+            num_bodies_disk: 130,
+            num_rings_disk: 16,
+            num_bodies_bulge: 60,
+            num_rings_bulge: 10,
         }
     }
 }
@@ -343,7 +354,12 @@ fn build(state: &mut State, force_model: ForceModel) {
 fn main() {
     let mut state = State::default();
 
-    state.bodies = state.ui.galaxy_model.make_bodies();
+    state.bodies = state.ui.galaxy_descrip.make_bodies(
+        state.config.num_bodies_disk,
+        state.config.num_rings_disk,
+        state.config.num_bodies_bulge,
+        state.config.num_rings_bulge,
+    );
     state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
     state.ui.dt_input = state.config.dt.to_string();

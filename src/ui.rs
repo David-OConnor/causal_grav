@@ -12,6 +12,23 @@ use crate::{
 pub const ROW_SPACING: f32 = 10.;
 pub const COL_SPACING: f32 = 30.;
 
+fn int_field(val: &mut usize, label: &str, redraw_bodies: &mut bool, ui: &mut Ui) {
+    ui.label(label);
+    let mut val_str = val.to_string();
+    if ui
+        .add_sized(
+            [40., Ui::available_height(ui)],
+            egui::TextEdit::singleline(&mut val_str),
+        )
+        .changed()
+    {
+        if let Ok(v) = val_str.parse::<usize>() {
+            *val = v;
+            *redraw_bodies = true;
+        }
+    }
+}
+
 fn force_debug(snapshot: &SnapShot, ui: &mut Ui) {
     ui.horizontal(|ui| {
         // for (i, body_V) in state.snapshots[state.ui.snapshot_selected]
@@ -46,9 +63,11 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
     // This variable prevents mutliple borrow errors.
     let mut reset_snapshot = false;
+    let mut redraw_bodies = false;
 
     TopBottomPanel::top("0").show(ctx, |ui| {
-        let snapshot = if state.snapshots.is_empty() {
+        let snapshot = if state.snapshots.len() < state.ui.snapshot_selected {
+            state.ui.snapshot_selected = 0;
             &SnapShot::default()
         } else {
             &state.snapshots[state.ui.snapshot_selected]
@@ -136,15 +155,8 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                     .radio_value(&mut state.ui.galaxy_model, model, model.to_str())
                     .changed()
                 {
-                    state.bodies = state.ui.galaxy_model.make_bodies();
                     state.ui.galaxy_descrip = model.descrip();
-                    state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
-
-                    state.snapshots = Vec::new();
-                    state.take_snapshot(0., 0.); // Initial snapshot; t=0.
-
-                    reset_snapshot = true;
-                    engine_updates.entities = true;
+                    redraw_bodies = true;
                 };
             }
 
@@ -169,7 +181,6 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.add_space(COL_SPACING);
 
             ui.label("Steps (x1000):");
-            // todo: Width?
             let mut val = (state.config.num_timesteps / 1_000).to_string();
             if ui
                 .add_sized(
@@ -183,7 +194,32 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 }
             }
 
-            // todo: Other params like ring ratio.
+            ui.add_space(COL_SPACING);
+
+            int_field(
+                &mut state.config.num_bodies_disk,
+                "bodies disk",
+                &mut redraw_bodies,
+                ui,
+            );
+            int_field(
+                &mut state.config.num_rings_disk,
+                "rings disk",
+                &mut redraw_bodies,
+                ui,
+            );
+            int_field(
+                &mut state.config.num_bodies_bulge,
+                "bodies bulge",
+                &mut redraw_bodies,
+                ui,
+            );
+            int_field(
+                &mut state.config.num_rings_bulge,
+                "rings bulge",
+                &mut redraw_bodies,
+                ui,
+            );
         });
         ui.add_space(ROW_SPACING);
 
@@ -201,6 +237,22 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
         ui.add_space(ROW_SPACING);
     });
+
+    if redraw_bodies {
+        state.bodies = state.ui.galaxy_descrip.make_bodies(
+            state.config.num_bodies_disk,
+            state.config.num_rings_disk,
+            state.config.num_bodies_bulge,
+            state.config.num_rings_bulge,
+        );
+        state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
+
+        state.snapshots = Vec::new();
+        state.take_snapshot(0., 0.); // Initial snapshot; t=0.
+
+        reset_snapshot = true;
+        engine_updates.entities = true;
+    }
 
     if reset_snapshot {
         change_snapshot(&mut scene.entities, &state.snapshots[0], &state.body_masses);

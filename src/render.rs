@@ -15,7 +15,7 @@ type Color = (f32, f32, f32);
 const WINDOW_TITLE: &str = "Causal gravity model";
 const WINDOW_SIZE_X: f32 = 1_600.;
 const WINDOW_SIZE_Y: f32 = 1_000.;
-const BACKGROUND_COLOR: Color = (0.5, 0.5, 0.5);
+const BACKGROUND_COLOR: Color = (0.0, 0.0, 0.0);
 
 const RENDER_DIST: f32 = 200.;
 
@@ -25,7 +25,7 @@ pub const BODY_SIZE_MAX: f32 = 0.6;
 
 pub const BODY_SHINYNESS: f32 = 2.;
 pub const SHELL_SHINYNESS: f32 = 2.;
-pub const BODY_COLOR: Color = (1.0, 0.2, 0.2);
+pub const BODY_COLOR: Color = (1.0, 0.4, 0.4);
 pub const SHELL_COLOR: Color = (1.0, 0.6, 0.2);
 
 pub const SHELL_OPACITY: f32 = 0.01;
