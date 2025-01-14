@@ -9,18 +9,6 @@ pub fn interpolate(data: &[(f64, f64)], val: f64) -> Option<f64> {
         panic!("At least two data points are required for interpolation.");
     }
 
-    // Find the interval in which `val` falls
-    for i in 0..data.len() - 1 {
-        let (x0, y0) = data[i];
-        let (x1, y1) = data[i + 1];
-
-        if val >= x0 && val <= x1 {
-            // Perform linear interpolation
-            let t = (val - x0) / (x1 - x0);
-            return Some(y0 + t * (y1 - y0));
-        }
-    }
-
     // If `val` is outside the range of data, extrapolate
     if val < data[0].0 {
         let (x0, y0) = data[0];
@@ -30,6 +18,21 @@ pub fn interpolate(data: &[(f64, f64)], val: f64) -> Option<f64> {
         let (x0, y0) = data[data.len() - 2];
         let (x1, y1) = data[data.len() - 1];
         return Some(y0 + (val - x0) / (x1 - x0) * (y1 - y0));
+    }
+
+    // Find the interval in which `val` falls
+    for i in 0..data.len() - 1 {
+        let (x0, y0) = data[i];
+        let (x1, y1) = data[i + 1];
+
+        if val >= x0 && val <= x1 {
+            // if (x1 - x0).abs() < 1e-10 {
+            //     return
+            // }
+            // Perform linear interpolation
+            let t = (val - x0) / (x1 - x0);
+            return Some(y0 + t * (y1 - y0));
+        }
     }
 
     None

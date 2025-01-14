@@ -37,32 +37,6 @@ pub fn make_bodies_balanced(num: usize, r: f64, mass_body: f64, mass_central: f6
     result
 }
 
-/// Make a halo of dark matter, or a galaxy's central bulge
-pub fn make_halo_bulge(radius: f64, n_bodies: usize, mass: f64) -> Vec<Body> {
-    let mut result = Vec::with_capacity(n_bodies);
-    let mut rng = rand::thread_rng();
-
-    for _ in 0..n_bodies {
-        let r = radius * rng.gen::<f64>().cbrt(); // Random radius scaled within [0, distribution_radius]
-        let θ = rng.gen_range(0.0..TAU); // Random angle θ in [0, 2*pi]
-        let ϕ = rng.gen_range(0.0..TAU / 2.); // Random angle phi in [0, pi]
-
-        // Convert spherical coordinates to Cartesian coordinates
-        let x = r * ϕ.sin() * θ.cos();
-        let y = r * ϕ.sin() * θ.sin();
-        let z = r * ϕ.cos();
-
-        result.push(Body {
-            posit: Vec3::new(x, y, z),
-            vel: Vec3::new_zero(), // todo A/R
-            accel: Vec3::new_zero(),
-            mass,
-        });
-    }
-
-    result
-}
-
 #[derive(Clone, Copy, PartialEq)]
 pub enum GalaxyShape {
     GrandDesignSpiral,
@@ -127,6 +101,10 @@ fn ring_volume(r: f64, dr: f64) -> f64 {
 
 impl GalaxyDescrip {
     fn make_disk(&self, num_bodies: usize, num_rings: usize) -> Vec<Body> {
+        if self.mass_density_disk.is_empty() {
+            return Vec::new();
+        }
+
         let mut result = Vec::new();
         let mut rng = rand::thread_rng();
 
@@ -162,12 +140,17 @@ impl GalaxyDescrip {
             // let bodies_this_r = (mass_portion * num_bodies as f64) as usize;
 
             println!(
-                "N bodies disk. r={r}: {:?}. rho: {:?}",
+                "N bodies disk. r={r}: {:?} rho: {:?}",
                 bodies_this_r, mass_this_r
             );
 
             // M☉
-            let mass_per_body = mass_this_r / bodies_this_r as f64;
+            let mass_per_body = if bodies_this_r == 0 {
+                0.
+            } else {
+                mass_this_r / bodies_this_r as f64
+            };
+            println!("MPB disk: {:?}", mass_per_body);
 
             // Convert from km/s to kpc/myr
             let v_mag = interpolate(&self.rotation_curve_disk, *r).unwrap() * KPC_MYR_PER_KM_S;
@@ -222,8 +205,8 @@ impl GalaxyDescrip {
             mass_count += body.mass;
         }
 
-        println!("Total body count: {:?}", result.len());
-        println!("Total mass: {:?}", mass_count);
+        println!("Total disk body count: {:?}", result.len());
+        println!("Total disk mass: {:?}", mass_count);
 
         result
     }
@@ -231,6 +214,10 @@ impl GalaxyDescrip {
     fn make_bulge(&self, num_bodies: usize, num_rings: usize) -> Vec<Body> {
         // todo: DRY between this and disk; consolidate.
         // todo: maybe combine these into the same fn. Or, combine common code into a helper.
+        if self.mass_density_bulge.is_empty() {
+            return Vec::new();
+        }
+
         let mut result = Vec::with_capacity(num_bodies);
         let mut rng = rand::thread_rng();
 
@@ -245,6 +232,8 @@ impl GalaxyDescrip {
             mass_sample_total += interpolate(&self.mass_density_bulge, *r).unwrap();
         }
 
+        println!("\n\nBulge total vol: {:?}\n", total_volume); // todo temp
+
         // todo: Split into disc + bulge, among other things.
         for r in &r_all {
             // todo: Most of this is a hack.
@@ -257,7 +246,6 @@ impl GalaxyDescrip {
                 let volume_this_r = ring_volume(*r, dr);
 
                 let volume_portion = volume_this_r / total_volume;
-                // let mass_portion = mass_this_r / mass_sample_total;
 
                 // Trying this: Choose number of bodies based on area;
                 (volume_portion * num_bodies as f64) as usize
@@ -265,16 +253,20 @@ impl GalaxyDescrip {
 
             // let bodies_this_r = (mass_portion * num_bodies as f64) as usize;
 
+            // M☉
+            let mass_per_body = if bodies_this_r == 0 {
+                0.
+            } else {
+                mass_this_r / bodies_this_r as f64
+            };
+
             println!(
-                "N bodies disk. r={r}: {:?}. rho: {:?}",
-                bodies_this_r, mass_this_r
+                "Bulge. r: {r} N bodies: {:?} rho: {:.4?}, mass per: {:.4?}",
+                bodies_this_r, mass_this_r, mass_per_body
             );
 
-            // M☉
-            let mass_per_body = mass_this_r / bodies_this_r as f64;
-
             // Convert from km/s to kpc/myr
-            let v_mag = interpolate(&self.rotation_curve_disk, *r).unwrap() * KPC_MYR_PER_KM_S;
+            let v_mag = interpolate(&self.rotation_curve_bulge, *r).unwrap() * KPC_MYR_PER_KM_S;
 
             for i in 0..bodies_this_r {
                 // todo: Random, or even? Even is more uniform, which may be nice, but
@@ -309,10 +301,11 @@ impl GalaxyDescrip {
 
         let mut mass_sum = 0.;
         for body in &result {
+            println!("Body mass: {:?}", body.mass);
             mass_sum += body.mass;
         }
 
-        let mass_scaler = self.mass_disk / mass_sum;
+        let mass_scaler = self.mass_bulge / mass_sum;
         for body in &mut result {
             body.mass *= mass_scaler;
         }
@@ -322,6 +315,9 @@ impl GalaxyDescrip {
         for body in &mut result {
             mass_count += body.mass;
         }
+
+        println!("Total bulge body count: {:?}", result.len());
+        println!("Total bulge mass: {:?}", mass_count);
 
         result
     }

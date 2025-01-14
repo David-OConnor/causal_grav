@@ -14,5 +14,5 @@ rand = "^0.8.5"
 # cudarc = { version = "^0.12.1", features=["cuda-12060"] }
 
 plotters = "^0.3.7"  # For 2d plots
+# For saving and loading snapshots.
 bincode = "^2.0.0-rc.3"
-clap = { version = "4.5.23", features = ["derive"] }  # For saving and loading snapshots.

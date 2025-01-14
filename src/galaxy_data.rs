@@ -459,7 +459,10 @@ pub fn ngc_2685() -> GalaxyDescrip {
     ]
     .into_iter()
     .enumerate()
-    .map(|(i, v)| v * 1e6 / radius[i])
+    .map(|(i, v)| {
+        let divisor = if radius[i] == 0.0 { 1.0 } else { radius[i] };
+        v * 1e6 / divisor
+    })
     .collect(); // convert to M☉/kpc^3;
 
     // km/s
@@ -599,7 +602,10 @@ pub fn ngc_2824() -> GalaxyDescrip {
     ]
     .into_iter()
     .enumerate()
-    .map(|(i, v)| v * 1e6 / radius[i])
+    .map(|(i, v)| {
+        let divisor = if radius[i] == 0.0 { 1.0 } else { radius[i] };
+        v * 1e6 / divisor
+    })
     .collect(); // convert to M☉/kpc^3;
 
     // km/s
@@ -612,6 +618,8 @@ pub fn ngc_2824() -> GalaxyDescrip {
         106.281837, 101.330189, 96.626576, 92.125696, 87.838396, 83.753710, 79.850645, 76.140453,
         72.597047, 69.214173, 65.995437, 62.921535, 59.992739, 57.203311, 54.540358, 51.999958,
     ];
+
+    println!("\n\nBulge data A: {:?}\n\n", density_bulge_);
 
     let mass_density_disk = zip_data(&radius, density_disk_);
     let velocity_disk = zip_data(&radius, velocity_disk_);

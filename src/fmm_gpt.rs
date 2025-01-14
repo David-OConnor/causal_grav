@@ -1,4 +1,5 @@
 //! Acceleration calculations for n-body using Fast Multipole Methods (FMM) in conjunction with tree-(?)
+//! Initial code from ChatGPT
 
 // todo: Update this GPT basis
 

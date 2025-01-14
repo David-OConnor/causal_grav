@@ -19,7 +19,7 @@ mod accel;
 mod body_creation;
 mod cdm;
 mod fluid_dynamics;
-mod fmm;
+mod fmm_gpt;
 mod galaxy_data;
 mod gaussian;
 mod gem;
@@ -30,7 +30,10 @@ mod render;
 mod ui;
 mod units;
 mod util;
-
+mod fmm_gadget4;
+mod fmm_py;
+mod barnes_hut_a;
+mod barnes_hut_b;
 // Shower thought, from looking at this from a first person view: View things from the body's perspective.
 // Can you make of it something like that?
 
