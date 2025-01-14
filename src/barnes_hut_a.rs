@@ -2,6 +2,7 @@
 
 use crate::Body;
 use lin_alg::f64::Vec3;
+use crate::barnes_hut::BoundingBox;
 
 struct OctNode {
     children_base: usize,
@@ -40,10 +41,12 @@ impl OctTree {
     /// > "Whether a node is or isn't sufficiently far away from a body, depends on the quotient s / d, where s is the width of the region represented by the internal node, and d is the distance between the body and the node's center of mass. The node is sufficiently far away when this ratio is smaller than a threshold value θ. The parameter θ determines the accuracy of the simulation; larger values of θ increase the speed of the simulation but decreases its accuracy. If θ = 0, no internal node is treated as a single body and the algorithm degenerates to a direct-sum algorithm."
     ///
     /// A value of 0.5 is quite common.
-    pub fn new(particles: &[&Body], theta: f64) -> Self {
-        let (min, max) = find_min_max(&particles);
-        let mut tree = OctTree::construct_empty_tree(min, max, theta, particles.len());
-        tree.add_particles_to_specific_node(particles, 0);
+    pub fn new(bodies: &[&Body], theta: f64) -> Self {
+        let limits = BoundingBox::new(bodies);
+
+        let mut tree = OctTree::construct_empty_tree(min, max, theta, bodies.len());
+
+        tree.add_particles_to_specific_node(bodies, 0);
         //calculate center of masses
         for (i, n) in &mut tree.nodes.iter().enumerate() {
             tree.center_of_masses
@@ -232,38 +235,5 @@ impl OctTree {
 
         (min_coord, max_coord)
     }
-}
-
-fn find_min_max(particles: &[&Body]) -> (Vec3, Vec3) {
-    let mut min: Vec3 = Vec3::new_zero();
-    let mut max: Vec3 = Vec3::new_zero();
-    for particle in particles {
-        let particle = particle.posit;
-        if particle.x < min.x {
-            min.x = particle.x;
-        }
-
-        if particle.y < min.y {
-            min.y = particle.y;
-        }
-
-        if particle.z < min.z {
-            min.z = particle.z;
-        }
-
-        if particle.x > max.x {
-            max.x = particle.x;
-        }
-
-        if particle.y > max.y {
-            max.y = particle.y;
-        }
-
-        if particle.z > max.z {
-            max.z = particle.z;
-        }
-    }
-
-    (min, max)
 }
 

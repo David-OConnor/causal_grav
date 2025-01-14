@@ -30,10 +30,15 @@ mod render;
 mod ui;
 mod units;
 mod util;
-mod fmm_gadget4;
-mod fmm_py;
-mod barnes_hut_a;
-mod barnes_hut_b;
+// mod fmm_gadget4;
+// mod fmm_py;
+// mod barnes_hut_a;
+// mod barnes_hut_b;
+// mod barnes_hut_c;
+// mod barnes_hut_d;
+// mod barnes_hut_gpt;
+mod barnes_hut;
+
 // Shower thought, from looking at this from a first person view: View things from the body's perspective.
 // Can you make of it something like that?
 
@@ -164,6 +169,8 @@ struct State {
     /// For rendering; separate from snapshots since it's invariant.
     body_masses: Vec<f32>,
     time_elapsed: f64,
+    /// Smaller values use less grouping; these are slower, but more accurate.
+    barnes_hut_θ: f64,
 }
 
 impl State {

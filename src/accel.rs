@@ -27,7 +27,7 @@ use crate::{
 // }
 
 /// A helper function, where the inputs are precomputed.
-fn acc_newton_inner(acc_dir: Vec3, src_mass: f64, r: f64) -> Vec3 {
+pub(crate) fn acc_newton_inner(acc_dir: Vec3, src_mass: f64, r: f64) -> Vec3 {
     acc_dir * G * src_mass / (r.powi(2) + SOFTENING_FACTOR_SQ)
 }
 
