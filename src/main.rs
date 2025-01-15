@@ -2,9 +2,10 @@
 #![allow(non_ascii_idents)]
 
 use std::path::PathBuf;
-
+use std::time::Instant;
 use lin_alg::f64::Vec3;
 use rand::Rng;
+use rayon::prelude::*;
 
 use crate::{
     accel::MondFn,
@@ -32,11 +33,6 @@ mod units;
 mod util;
 // mod fmm_gadget4;
 // mod fmm_py;
-// mod barnes_hut_a;
-// mod barnes_hut_b;
-// mod barnes_hut_c;
-// mod barnes_hut_d;
-// mod barnes_hut_gpt;
 mod barnes_hut;
 
 // Shower thought, from looking at this from a first person view: View things from the body's perspective.
@@ -67,11 +63,6 @@ mod barnes_hut;
 //
 // Some sort of cumulative drag?? Can we estimate and test this?
 
-// todo: A/R.
-pub const SOFTENING_FACTOR_SQ: f64 = 0.01;
-
-const SNAPSHOT_RATIO: usize = 4;
-
 pub struct Config {
     num_timesteps: usize,
     dt_integration_max: f64,
@@ -87,6 +78,10 @@ pub struct Config {
     /// When placing bodies.
     num_rings_disk: usize, // todo: You may, in the future, not make this a constant.
     num_rings_bulge: usize, // todo: You may, in the future, not make this a constant.
+    softening_factor_sq: f64,
+    snapshot_ratio: usize,
+    /// Smaller values use less grouping; these are slower, but more accurate.
+    barnes_hut_θ: f64,
 }
 
 impl Default for Config {
@@ -104,15 +99,18 @@ impl Default for Config {
             num_timesteps: 5_000,
             shell_creation_ratio,
             dt,
-            dt_integration_max: 0.01,
+            dt_integration_max: 0.01, // Not used
             // dynamic_dt_scaler: 0.01,
-            dynamic_dt_scaler: 0.1,
+            dynamic_dt_scaler: 0.1, // not used.
             // num_rays_per_iter: 200,
             gauss_c: shell_spacing * COEFF_C,
             num_bodies_disk: 130,
             num_rings_disk: 16,
             num_bodies_bulge: 60,
             num_rings_bulge: 10,
+            softening_factor_sq: 0.01,
+            snapshot_ratio: 4,
+            barnes_hut_θ: 0.1,
         }
     }
 }
@@ -169,8 +167,6 @@ struct State {
     /// For rendering; separate from snapshots since it's invariant.
     body_masses: Vec<f32>,
     time_elapsed: f64,
-    /// Smaller values use less grouping; these are slower, but more accurate.
-    barnes_hut_θ: f64,
 }
 
 impl State {
@@ -296,6 +292,8 @@ fn build(state: &mut State, force_model: ForceModel) {
         integrate_start_t, state.time_elapsed, farthest_r
     );
 
+    let mut start_time = Instant::now();
+
     for t in 0..state.config.num_timesteps {
         // Create a new set of rays.
         if force_model == ForceModel::GaussShells && t % state.config.shell_creation_ratio == 0 {
@@ -320,12 +318,13 @@ fn build(state: &mut State, force_model: ForceModel) {
         // todo: C+P from integrate, so we can test acc vals.
         let bodies_other = state.bodies.clone(); // todo: I don't like this. Avoids mut error.
 
-        let acc = |id, posit| match force_model {
-            ForceModel::Newton => accel::acc_newton(posit, &bodies_other, id, None),
+        let acc_fn = |id, posit| match force_model {
+            // ForceModel::Newton => accel::acc_newton(posit, id, &bodies_other,  None, state.config.softening_factor_sq),
+            ForceModel::Newton => accel::acc_newton_parallel(posit, id, &bodies_other,  None, state.config.softening_factor_sq),
             ForceModel::GaussShells => {
-                accel::calc_acc_shell(&state.shells, posit, id, state.config.gauss_c)
+                accel::calc_acc_shell(&state.shells, posit, id, state.config.gauss_c, state.config.softening_factor_sq)
             }
-            ForceModel::Mond(mond_fn) => accel::acc_newton(posit, &bodies_other, id, Some(mond_fn)),
+            ForceModel::Mond(mond_fn) => accel::acc_newton(posit, id, &bodies_other, Some(mond_fn), state.config.softening_factor_sq),
         };
 
         // Calculate dt for this step, based on the closest/fastest rel velocity.
@@ -334,8 +333,18 @@ fn build(state: &mut State, force_model: ForceModel) {
         // todo: Static DT for now, or shells won't work.
         let dt = state.config.dt;
 
-        for (id, body) in &mut state.bodies.iter_mut().enumerate() {
-            body.accel = acc(id, body.posit);
+
+        if t < 100 {
+            start_time = Instant::now();
+        }
+        state.bodies.
+            par_iter_mut()
+            .enumerate()
+            .for_each(|(id, body_acted_on)| {
+            body_acted_on.accel = acc_fn(id, body_acted_on.posit);
+        });
+        if t < 100 {
+            println!("N body time: {}us", start_time.elapsed().as_micros());
         }
 
         state.time_elapsed += dt;
@@ -348,11 +357,12 @@ fn build(state: &mut State, force_model: ForceModel) {
                 dt,
                 state.config.gauss_c,
                 force_model,
+                state.config.softening_factor_sq
             );
         }
 
         // Save the current state to a snapshot, for later playback.
-        if t % SNAPSHOT_RATIO == 0 {
+        if t % state.config.snapshot_ratio == 0 {
             state.take_snapshot(state.time_elapsed, dt);
         }
     }

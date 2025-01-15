@@ -16,3 +16,5 @@ rand = "^0.8.5"
 plotters = "^0.3.7"  # For 2d plots
 # For saving and loading snapshots.
 bincode = "^2.0.0-rc.3"
+
+rayon = "^1.10.0"  # Parallel execution on CPU using thread pools.

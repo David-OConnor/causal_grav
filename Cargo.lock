@@ -350,6 +350,7 @@ dependencies = [
  "lin_alg",
  "plotters",
  "rand",
+ "rayon",
 ]
 
 [[package]]

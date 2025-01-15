@@ -21,7 +21,7 @@ type Color = (f32, f32, f32);
 const WINDOW_TITLE: &str = "Causal gravity model";
 const WINDOW_SIZE_X: f32 = 1_600.;
 const WINDOW_SIZE_Y: f32 = 1_000.;
-const BACKGROUND_COLOR: Color = (0.1, 0.1, 0.1);
+const BACKGROUND_COLOR: Color = (0., 0., 0.);
 
 const RENDER_DIST: f32 = 200.;
 
@@ -75,7 +75,7 @@ pub fn render(state: State) {
                 // Light from above and to a side.
                 PointLight {
                     type_: LightType::Omnidirectional,
-                    position: Vec3::new(30., 50., 60.),
+                    position: Vec3::new(30., 100., 60.),
                     diffuse_color: [0.3, 0.4, 0.5, 1.],
                     specular_color: [0.3, 0.4, 0.5, 1.],
                     diffuse_intensity: 8_000.,
@@ -84,11 +84,19 @@ pub fn render(state: State) {
                 // Light from below
                 PointLight {
                     type_: LightType::Omnidirectional,
-                    position: Vec3::new(20., -50., 0.),
+                    position: Vec3::new(20., -100., 0.),
                     diffuse_color: [0.3, 0.4, 0.5, 1.],
                     specular_color: [0.3, 0.4, 0.5, 1.],
                     diffuse_intensity: 5_000.,
                     specular_intensity: 20_000.,
+                },
+                PointLight {
+                    type_: LightType::Omnidirectional,
+                    position: Vec3::new(20., -100., -100.),
+                    diffuse_color: [0.3, 0.4, 0.5, 1.],
+                    specular_color: [0.3, 0.4, 0.5, 1.],
+                    diffuse_intensity: 30_000.,
+                    specular_intensity: 0.,
                 },
             ],
         },
@@ -113,30 +121,6 @@ pub fn render(state: State) {
             &state.snapshots[state.ui.snapshot_selected],
             &state.body_masses,
         )
-    }
-
-    {
-        // // todo: Temp to draw the tree.
-        let bb = Cube::from_bodies(&state.bodies).unwrap();
-        let body_ids: Vec<usize> = (0..state.bodies.len()).collect();
-        let tree = crate::barnes_hut::Tree::new(&state.bodies, &body_ids, &bb);
-
-        println!("\n\n\n Tree: {:.2?}\n\n\n", tree);
-
-        for child in tree.get_all_children() {
-            let c = child.bounding_box.center;
-            let posit = Vec3::new(c.x as f32, c.y as f32, c.z as f32) + Vec3::new(0., 0., 1.5);
-
-            scene.entities.push(Entity::new(
-                1,
-                posit,
-                Quaternion::new_identity(),
-                child.bounding_box.width as f32 * 0.9,
-                (50., 100., 255.),
-                BODY_SHINYNESS,
-            ));
-            println!(" - {:?}", child.bounding_box);
-        }
     }
 
     graphics::run(

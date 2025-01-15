@@ -143,8 +143,8 @@ pub fn plot(data: &[(f64, f64)], x_label: &str, y_label: &str, plot_title: &str,
             (min.min(x), max.max(x))
         });
 
-    println!("Data: {:?}", data);
-    println!("X range: {:?}", x_range);
+    // println!("Data: {:?}", data);
+    // println!("X range: {:?}", x_range);
 
     // let x_range = (0., 10.); // todo temp
 

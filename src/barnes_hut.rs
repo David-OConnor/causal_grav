@@ -8,6 +8,7 @@
 // todo: Should we store Trees recursively, or with a top level struct that has a
 // Vec of terminal nodes, and a vec of non-terminal ones?
 
+use egui::IdMap;
 use lin_alg::f64::Vec3;
 
 use crate::{accel::acc_newton_inner, Body};
@@ -28,7 +29,9 @@ pub struct Cube {
 
 impl Cube {
     /// Construct minimum limits that encompass all bodies.
-    pub fn from_bodies(bodies: &[Body]) -> Option<Self> {
+    /// The z offset is intended for the case where the Z coordinate for all particles is 0.
+    /// This prevents the divisions straddling the points, doubling the number of nodes.
+    pub fn from_bodies(bodies: &[Body], z_offset: bool) -> Option<Self> {
         // todo: You could also accept a pad, and run this
         // periodically instead of eacy time.
         if bodies.is_empty() {
@@ -52,6 +55,10 @@ impl Cube {
             z_max = z_max.max(p.z);
         }
 
+        if z_offset {
+            z_max += 1e-5;
+        }
+
         let x_size = x_max - x_min;
         let y_size = y_max - y_min;
         let z_size = z_max - z_min;
@@ -60,8 +67,7 @@ impl Cube {
         let mut width = x_size.max(y_size).max(z_size);
         let width_div2 = width / 2.;
 
-        // todo: QC this...
-        let center = Vec3::new(
+        let mut center = Vec3::new(
             (x_max + x_min) / 2.,
             (y_max + y_min) / 2.,
             (z_max + z_min) / 2.,
@@ -90,35 +96,8 @@ impl Cube {
         }
     }
 
-    // /// Uses binary logic.
-    // /// Note: The centers and sizes can be computed dyanmically; we use parameters as a cahe.
-    // fn from_octant(octant: usize, center_x: f64, center_y: f64, center_z: f64,
-    //                half_size_x: f64, half_size_y: f64, half_size_z: f64) -> Self {
-    //     assert!(octant < 8);
-    //
-    //     // todo: This isn't right. On the right track, but wrong.
-    //     Self {
-    //         x_min: center_x + ((octant >> 0) & 1) as f64,
-    //         x_max: center_x + ((octant >> 0) & 1) as f64,
-    //         y_min: center_y + ((octant >> 1) & 1) as f64,
-    //         y_max: center_y + ((octant >> 1) & 1) as f64,
-    //         z_min: center_z + ((octant >> 2) & 1) as f64,
-    //         z_max: center_z + ((octant >> 2) & 1) as f64,
-    //     }
-    // }
-
     /// Divide this into equal-area octants.
     pub fn divide_into_octants(&self) -> [Self; 8] {
-        let center_x = (self.x_max + self.x_min) / 2.;
-        let center_y = (self.y_max + self.y_min) / 2.;
-        let center_z = (self.z_max + self.z_min) / 2.;
-
-        // let half_size_x = (self.x_max - self.x_min) / 2.;
-        // let half_size_y = (self.y_max - self.y_min) / 2.;
-        // let half_size_z = (self.z_max - self.z_min) / 2.;
-        //
-        // [0, 1, 2, 3, 5, 6, 7, 8].map(|i| self.from_octant(i, center_x, center_y, center_z, half_size_x, half_size_y, half_size_z))
-
         let width = self.width / 2.;
         let wd2 = self.width / 4.; // short for brevity below.
 
@@ -132,79 +111,6 @@ impl Cube {
             Self::new(self.center + Vec3::new(wd2, -wd2, -wd2), width, wd2),
             Self::new(self.center + Vec3::new(-wd2, wd2, -wd2), width, wd2),
             Self::new(self.center + Vec3::new(-wd2, -wd2, -wd2), width, wd2),
-            // Each combination of (min, center) and (center, max).
-            // Self {
-            //     width,
-            //     x_min: self.x_min,
-            //     x_max: self.center.x,
-            //     y_min: self.y_min,
-            //     y_max: self.center.y,
-            //     z_min: self.z_min,
-            //     z_max: self.center.z,
-            // },
-            // Self {
-            //     width,
-            //     x_min: self.center.x,
-            //     x_max: self.x_max,
-            //     y_min: self.y_min,
-            //     y_max: self.center.y,
-            //     z_min: self.z_min,
-            //     z_max: self.center.z,
-            // },
-            // Self {
-            //     width,
-            //     x_min: self.x_min,
-            //     x_max: self.center.x,
-            //     y_min: self.center.y,
-            //     y_max: self.y_max,
-            //     z_min: self.z_min,
-            //     z_max: self.center.z,
-            // },
-            // Self {
-            //     width,
-            //     x_min: self.center.x,
-            //     x_max: self.x_max,
-            //     y_min: self.center.y,
-            //     y_max: self.y_max,
-            //     z_min: self.z_min,
-            //     z_max: self.center.z,
-            // },
-            // Self {
-            //     width,
-            //     x_min: self.x_min,
-            //     x_max: self.center.x,
-            //     y_min: self.y_min,
-            //     y_max: self.center.y,
-            //     z_min: self.center.z,
-            //     z_max: self.z_min,
-            // },
-            // Self {
-            //     width,
-            //     x_min: self.center.x,
-            //     x_max: self.x_max,
-            //     y_min: self.y_min,
-            //     y_max: self.center.y,
-            //     z_min: self.center.z,
-            //     z_max: self.z_min,
-            // },
-            // Self {
-            //     width,
-            //     x_min: self.x_min,
-            //     x_max: self.center.x,
-            //     y_min: self.center.y,
-            //     y_max: self.y_max,
-            //     z_min: self.center.z,
-            //     z_max: self.z_min,
-            // },
-            // Self {
-            //     width,
-            //     x_min: self.center.x,
-            //     x_max: self.x_max,
-            //     y_min: self.center.y,
-            //     y_max: self.y_max,
-            //     z_min: self.center.z,
-            //     z_max: self.z_min,
-            // },
         ]
     }
 
@@ -217,17 +123,10 @@ impl Cube {
             && self.z_min <= posit.z
             && posit.z <= self.z_max
     }
-
-    // // todo: Use or rem A/R.
-    // pub fn intersects(&self, other: &Self) -> bool {
-    //     false // todo: Implement A/R.
-    //
-    // }
 }
 
 #[derive(Debug)]
 enum NodeType {
-    // NonTerminal([Box<Tree>; 8]),
     NonTerminal(Vec<Box<Tree>>),
     Terminal(NodeTerminal),
 }
@@ -236,7 +135,6 @@ enum NodeType {
 /// A terminal node, containing 0 or 1 body.
 struct NodeTerminal {
     /// Inner: Body index.
-    // pub body: Option<Body>,
     body: Option<usize>,
 }
 
@@ -245,22 +143,33 @@ struct NodeTerminal {
 pub struct Tree {
     data: Box<NodeType>,
     pub bounding_box: Cube, // todo temp pub?
-    /// We cache mass ands its center. We use this to calculate Newtonian acceleration
-    /// with a destination body.
-    mass: f64, // Calculated as needed.
-    center_of_mass: Vec3,   // Calculated as needed.
+    /// We use mass and center-of-mass to calculate Newtonian acceleration
+    /// with an acted-on body.
+    mass: f64,
+    center_of_mass: Vec3,
 }
 
 impl Tree {
-    /// Constructs a tree. Call this externaly using all bodies, and a bounding box that
-    /// encompasses them.
+    /// Constructs a tree. Call this externaly using all bodies.
+    pub fn new(bodies:  &[Body], id_acted_on: usize, z_offset: bool) -> Self {
+        let bb = Cube::from_bodies(bodies, z_offset).unwrap();
+        let body_ids: Vec<usize> = (0..bodies.len()).collect();
+
+        // Convert &[Body] to &[&Body]
+        let body_refs: Vec<&Body> = bodies.iter().collect();
+        Self::new_internal(&body_refs, &body_ids, &bb, id_acted_on)
+    }
+
+    /// Constructs a tree. This can be called externally, but has a slightly lower-level API, requiring
+    /// body IDs and a bounding box to be manually specified, for use during recursion.
     /// We assume that all bodies passed are inside the bounding box.
     /// `body_indices` must correspond to `bodies`.
-    pub fn new(bodies: &[Body], body_indices: &[usize], bb: &Cube) -> Self {
+    // pub fn new_internal(bodies: &[Body], body_ids: &[usize], bb: &Cube, id_acted_on: usize) -> Self {
+    pub fn new_internal(bodies: &[&Body], body_ids: &[usize], bb: &Cube, id_acted_on: usize) -> Self {
         let data = match bodies.len() {
             0 => NodeType::Terminal(NodeTerminal { body: None }),
             1 => NodeType::Terminal(NodeTerminal {
-                body: Some(body_indices[0]),
+                body: Some(body_ids[0]),
             }),
             _ => {
                 let octants = bb.divide_into_octants();
@@ -270,19 +179,25 @@ impl Tree {
                 for octant in &octants {
                     let mut bodies_this_octant = Vec::new();
                     let mut body_indices_this_octant = Vec::new();
+
                     for (i, body) in bodies.iter().enumerate() {
+                        if i == id_acted_on {
+                            continue // Exclude the body acted on from the tree.
+                        }
                         // Todo: Use a more efficient method, perhaps, where you position
                         // todo each body using > logic.
                         if octant.contains(body.posit) {
-                            bodies_this_octant.push(body.clone()); // todo: Clone...
-                            body_indices_this_octant.push(body_indices[i]);
+                            // bodies_this_octant.push(body.clone());
+                            bodies_this_octant.push(*body);
+                            body_indices_this_octant.push(body_ids[i]);
                         }
                     }
                     if !bodies_this_octant.is_empty() {
-                        children.push(Box::new(Tree::new(
-                            &bodies_this_octant,
+                        children.push(Box::new(Tree::new_internal(
+                            bodies_this_octant.as_slice(),
                             &body_indices_this_octant,
                             octant,
+                            id_acted_on
                         )))
                     }
                 }
@@ -291,7 +206,9 @@ impl Tree {
             }
         };
 
-        let (center_of_mass, mass) = center_of_mass(bodies);
+        // todo: Temp removed here.?
+        // let (center_of_mass, mass) = center_of_mass(bodies);
+        let (center_of_mass, mass) = (Vec3::new_zero(), 0.);
 
         Self {
             data: Box::new(data),
@@ -324,14 +241,15 @@ impl Tree {
     }
 
     /// For debugging only?
-    pub fn get_all_children(&self) -> Vec<&Self> {
+    /// Get all the terminal nodes (i.e. that contain 0 or 1 bodies, and no sub-nodes containing bodies)
+    pub fn get_leaves(&self) -> Vec<&Self> {
         let mut result = Vec::new();
 
         match self.data.as_ref() {
             NodeType::NonTerminal(nodes) => {
                 // Recur
                 for node in nodes {
-                    result.extend(node.get_all_children());
+                    result.extend(node.get_leaves());
                 }
             }
             NodeType::Terminal(node) => {
@@ -365,38 +283,22 @@ impl Tree {
     /// The parameter θ determines the accuracy of the simulation;
     /// larger values of θ increase the speed of the simulation but decreases its accuracy.
     /// If θ = 0, no internal node is treated as a single body and the algorithm degenerates to a direct-sum algorithm.
-    fn find_relevant_node(&self, posit_acted_on: Vec3, θ: f64) -> &Self {
+    fn collect_relevant_nodes<'a>(&'a self, posit_acted_on: Vec3, θ: f64, results: &mut Vec<&'a Tree>) {
         let dist = (posit_acted_on - self.center_of_mass).magnitude();
         let s = self.bounding_box.width;
 
         if s / dist < θ {
-            return self;
+            // If the node is far enough, add it to the results.
+            results.push(self);
+            return;
         }
 
-        // // If region size / distance < THETA, treat as single mass
-        // if (internal.region_half_size * 2.0) / dist < θ {
-        //     // Compute force from center-of-mass
-        //     pairwise_force_cm(body, internal.center_of_mass, internal.total_mass)
-        // } else {
-        //     // Otherwise, descend into children
-        //     let mut force = Vec3 { x: 0.0, y: 0.0, z: 0.0 };
-        //     for child_opt in internal.children.iter() {
-        //         if let Some(child) = child_opt {
-        //             force = force + compute_force_single(body, child);
-        //         }
-        //     }
-        //     force
-        // }
-
-        // // If not far enough away, add children to the stack.
-        // for (quadrant, child) in node.children.iter().enumerate() {
-        //     match child {
-        //         Some(child) => self.stack.push((child, bb.child(quadrant))),
-        //         None => (),
-        //     }
-        // }
-
-        self
+        // Otherwise, traverse into child nodes if this is a non-terminal node.
+        if let NodeType::NonTerminal(ref children) = *self.data {
+            for child in children {
+                child.collect_relevant_nodes(posit_acted_on, θ, results);
+            }
+        }
     }
 }
 
@@ -460,63 +362,33 @@ fn center_of_mass(bodies: &[Body]) -> (Vec3, f64) {
 /// Calculate Newtonian acceleration using the Barnes Hut algorithm.
 pub fn calc_acc_bh(
     posit_acted_on: Vec3,
-    bodies_other: &mut [Body],
     id_acted_on: usize,
+    bodies_other: &mut [Body],
     θ: f64,
+    softening_factor_sq: f64,
 ) -> Vec3 {
-    let bb = Cube::from_bodies(bodies_other).unwrap();
-    let body_ids: Vec<usize> = (0..bodies_other.len()).collect();
+    let tree = Tree::new(bodies_other, id_acted_on, true);
+    let mut relevant_nodes = Vec::new();
 
-    // todo: You must address self-interaction; likely during tree construction.
-    // todo: Check examples.
-    let tree = Tree::new(bodies_other, &body_ids, &bb);
+    tree.collect_relevant_nodes(posit_acted_on, θ, &mut relevant_nodes);
 
     let mut result = Vec3::new_zero();
 
-    // Transverse our tree, choosing a grouping coarseness based on distance.
-    // let dist = (posit_acted_on - self.center_of_mass).magnitude();
-    // let s = self.bounding_box.width;
-    //
-    // if s / dist < θ {
-    //     return self
-    // }
+    // Compute acceleration contributions from each relevant node.
+    for node in relevant_nodes {
+        let acc_diff = node.center_of_mass - posit_acted_on;
+        let dist = acc_diff.magnitude();
+        let acc_dir = acc_diff / dist; // Unit vec
 
-    // Iterate over bodies acting on our target.
-    for (i, body) in bodies_other.iter().enumerate() {
-        if i == id_acted_on {
-            continue; // self-interaction
+        // Skip self-interaction.
+        if dist < f64::EPSILON {
+            continue;
         }
 
-        let node_this_body = tree.find_relevant_node(posit_acted_on, θ);
-
-        // todo: How do we know if a body has already been taken into account?
-        // todo: mark the tree node as used??
-
-        // match tree.data.as_ref() {
-        //     NodeType::NonTerminal(nodes) => {
-        //         // Recur
-        //         for node in nodes {
-        //             result.extend(node.get_bodies());
-        //         }
-        //     }
-        //     NodeType::Terminal(node) => {
-        //         // Terminate recursion.
-        //         if let Some(body) = &node.body {
-        //             result.push(body);
-        //         }
-        //     }
-        // }
-        //
-        // let v = if tree.bounding_box.width / dist > θ {
-        //     let mass = tree.mass;
-        //     let posit = tree.center_of_mass;
-        // };
-
-        // for group in groups {
-        //     let group.posit - body.posit; // todo: QC order.
-        //     let acc_dir = acc_diff.magnitude();
-        //     body.acc += acc_newton_inner(acc_dir, group.mass);
-        // }
+        let acc_contribution = acc_newton_inner(acc_dir, node.mass, dist,softening_factor_sq);
+        result += acc_contribution;
     }
+
+
     result
 }

@@ -1,5 +1,5 @@
 use egui::{Color32, Context, RichText, Slider, TopBottomPanel, Ui};
-use graphics::{EngineUpdates, Scene};
+use graphics::{EngineUpdates, Entity, Scene};
 
 use crate::{
     accel::MondFn,
@@ -9,6 +9,8 @@ use crate::{
     ForceModel, State,
 };
 
+use lin_alg::f32::{Quaternion, Vec3};
+
 pub const ROW_SPACING: f32 = 10.;
 pub const COL_SPACING: f32 = 30.;
 
@@ -17,7 +19,7 @@ fn int_field(val: &mut usize, label: &str, redraw_bodies: &mut bool, ui: &mut Ui
     let mut val_str = val.to_string();
     if ui
         .add_sized(
-            [40., Ui::available_height(ui)],
+            [60., Ui::available_height(ui)],
             egui::TextEdit::singleline(&mut val_str),
         )
         .changed()
@@ -163,8 +165,10 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.add_space(COL_SPACING);
 
             ui.checkbox(&mut state.ui.add_halo, "Add halo");
+        });
+        ui.horizontal(|ui| {
 
-            ui.add_space(COL_SPACING);
+            ui.add_space(ROW_SPACING);
 
             ui.label("dt:");
             // ui.text_edit_singleline(&mut state.ui.dt_input);
@@ -178,7 +182,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 }
             }
 
-            ui.add_space(COL_SPACING);
+            // ui.add_space(COL_SPACING/2.);
 
             ui.label("Steps (x1000):");
             let mut val = (state.config.num_timesteps / 1_000).to_string();
@@ -194,7 +198,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 }
             }
 
-            ui.add_space(COL_SPACING);
+            // ui.add_space(COL_SPACING);
 
             int_field(
                 &mut state.config.num_bodies_disk,
@@ -220,6 +224,31 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 &mut redraw_bodies,
                 ui,
             );
+
+            if ui.button("Tree").clicked() {
+                // todo: Temp to draw the tree.
+                // todo: Of current snapshot.
+                let tree = crate::barnes_hut::Tree::new(&state.bodies, 9999, true);
+
+                // println!("\n\n\n Tree: {:.2?}\n\n\n", tree);
+
+                for leaf in tree.get_leaves() {
+                    let c = leaf.bounding_box.center;
+                    let posit = Vec3::new(c.x as f32, c.y as f32, c.z as f32) + Vec3::new(0., 0., 1.5);
+
+                    scene.entities.push(Entity::new(
+                        1,
+                        posit,
+                        Quaternion::new_identity(),
+                        leaf.bounding_box.width as f32 * 0.9,
+                        (50., 100., 255.),
+                        1.,
+                    ));
+                    println!(" - {:?}", leaf.bounding_box);
+                    // println!(" t- {:?}", leaf.is_terminal());
+                }
+                engine_updates.entities = true;
+            }
         });
         ui.add_space(ROW_SPACING);
 
