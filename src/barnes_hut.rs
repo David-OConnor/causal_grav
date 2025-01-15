@@ -109,26 +109,17 @@ impl Cube {
         let wd2 = self.width / 4.; // short for brevity below.
 
         // Every combination of + and - for the center offset.
+        // The order matters, due to the binary index logic used when partitioning bodies into octants.
         [
-            Self::new(self.center + Vec3::new(wd2, wd2, wd2), width, wd2),
-            Self::new(self.center + Vec3::new(-wd2, wd2, wd2), width, wd2),
-            Self::new(self.center + Vec3::new(wd2, -wd2, wd2), width, wd2),
-            Self::new(self.center + Vec3::new(wd2, wd2, -wd2), width, wd2),
-            Self::new(self.center + Vec3::new(-wd2, -wd2, wd2), width, wd2),
+            Self::new(self.center + Vec3::new(-wd2, -wd2, -wd2), width, wd2),
             Self::new(self.center + Vec3::new(wd2, -wd2, -wd2), width, wd2),
             Self::new(self.center + Vec3::new(-wd2, wd2, -wd2), width, wd2),
-            Self::new(self.center + Vec3::new(-wd2, -wd2, -wd2), width, wd2),
+            Self::new(self.center + Vec3::new(wd2, wd2, -wd2), width, wd2),
+            Self::new(self.center + Vec3::new(-wd2, -wd2, wd2), width, wd2),
+            Self::new(self.center + Vec3::new(wd2, -wd2, wd2), width, wd2),
+            Self::new(self.center + Vec3::new(-wd2, wd2, wd2), width, wd2),
+            Self::new(self.center + Vec3::new(wd2, wd2, wd2), width, wd2),
         ]
-    }
-
-    // todo: Use or rem A/R.
-    pub fn contains(&self, posit: Vec3) -> bool {
-        self.x_min <= posit.x
-            && posit.x <= self.x_max
-            && self.y_min <= posit.y
-            && posit.y <= self.y_max
-            && self.z_min <= posit.z
-            && posit.z <= self.z_max
     }
 }
 
@@ -141,8 +132,6 @@ enum NodeType {
 #[derive(Debug)]
 /// A recursive tree. Each node can be subdivided  Terminates with `NodeType::NodeTerminal`.
 pub struct Tree {
-    // todo: Consider replacing this with `children: Vec<Box<Tree>>`. Terminal means children is empty.
-    // data: Box<NodeType>,
     children: Vec<Box<Tree>>,
     pub bounding_box: Cube, // todo temp pub?
     /// We use mass and center-of-mass to calculate Newtonian acceleration
@@ -165,10 +154,10 @@ impl Tree {
         let bb = Cube::from_bodies(bodies, z_offset).unwrap();
 
         // Convert &[Body] to &[&Body], and remove the acted-on body.
-        let body_refs: Vec<&Body> = bodies.iter().enumerate().filter(|(i, b)| i != *id_acted_on).collect();
+        let body_refs: Vec<&Body> = bodies.iter().enumerate().filter(|(i, b)| *i != id_acted_on).map(|v| v.1).collect();
 
         let body_ids: Vec<usize> = (0..body_refs.len()).collect();
-        Self::new_internal(&body_refs, &body_ids, &bb, posit_acted_on, θ)
+        Self::new_internal(&body_refs, &body_ids, bb, posit_acted_on, θ)
     }
 
     /// Constructs a tree. This can be called externally, but has a slightly lower-level API, requiring
@@ -178,54 +167,56 @@ impl Tree {
     pub fn new_internal(
         bodies: &[&Body],
         body_ids: &[usize],
-        bb: &Cube,
+        bb: Cube,
         posit_acted_on: Vec3,
-        // id_acted_on: usize,
         θ: f64,
     ) -> Self {
         let (center_of_mass, mass) = center_of_mass(bodies);
 
         let data = match bodies.len() {
-            // 0 | 1 => NodeType::Terminal,
             0 | 1 => Vec::new(),
             _ => {
                 let dist = (posit_acted_on - center_of_mass).magnitude();
 
                 // The actor is far; group all bodies in this bounding box.
                 if bb.width / dist < θ {
-                    // NodeType::Terminal
                     Vec::new()
                 } else {
                     // The actor is close; continue subdividing.
-                    let octants = bb.divide_into_octants();
 
                     // Populate up to 8 children.
                     let mut children = Vec::new();
-                    for octant in &octants {
-                        let mut bodies_this_octant = Vec::new();
-                        let mut body_indices_this_octant = Vec::new();
+                    let octants = bb.divide_into_octants();
+                    // let partitions = partition_bodies_into_octants(bodies, &bb);
 
-                        for (i, body) in bodies.iter().enumerate() {
-                            // Todo: Use a more efficient method, perhaps, where you position
-                            // todo each body using > logic.
-                            if octant.contains(body.posit) {
-                                bodies_this_octant.push(*body);
-                                body_indices_this_octant.push(body_ids[i]);
-                            }
-                        }
-                        if !bodies_this_octant.is_empty() {
+                    // todo: Arrs? slices
+                    // todo: What a mess; problem with the [Vec::new(), ;8] syntax.
+                    let mut bodies_by_octant: [Vec<&Body>; 8] = [Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new() ];
+                    // let mut body_ids_by_octant = [Vec::new(); 8];
+                    let mut body_ids_by_octant = [Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new() ];
+
+                    for (i, body) in bodies.iter().enumerate() {
+                        let mut index = 0;
+                        if body.posit.x > bb.center.x { index |= 0b001; }
+                        if body.posit.y > bb.center.y { index |= 0b010; }
+                        if body.posit.z > bb.center.z { index |= 0b100; }
+
+                        bodies_by_octant[index].push(body);
+                        body_ids_by_octant[index].push(i);
+                    }
+
+                    for (i, octant) in octants.into_iter().enumerate() {
+                        if !bodies_by_octant[i].is_empty() {
                             children.push(Box::new(Tree::new_internal(
-                                bodies_this_octant.as_slice(),
-                                &body_indices_this_octant,
+                                bodies_by_octant[i].as_slice(),
+                                &body_ids_by_octant[i],
                                 octant,
                                 posit_acted_on,
-                                // id_acted_on,
                                 θ,
                             )))
                         }
                     }
 
-                    // NodeType::NonTerminal(children)
                     children
                 }
             }
@@ -233,7 +224,7 @@ impl Tree {
 
         Self {
             children: data,
-            bounding_box: bb.clone(), // todo: Re
+            bounding_box: bb,
             mass,
             center_of_mass,
         }
@@ -244,18 +235,12 @@ impl Tree {
     pub fn get_leaves(&self) -> Vec<&Self> {
         let mut result = Vec::new();
 
-
-        // match self.data.as_ref() {
         if !self.children.is_empty() {
             // NodeType::NonTerminal(nodes) => {
             // Recur
-            // for node in nodes {
             for node in &self.children {
                 result.extend(node.get_leaves());
             }
-            // }
-            // NodeType::Terminal(_) => {
-            // NodeType::Terminal => {
         } else {
             // Terminate recursion.
             result.push(self);
@@ -263,15 +248,6 @@ impl Tree {
 
         result
     }
-    //
-    // fn is_terminal(&self) -> bool {
-    //     self.children.as_ref().is_empty()
-    //     // match self.data.as_ref() {
-    //     //     // NodeType::Terminal(_) => true,
-    //     //     NodeType::Terminal => true,
-    //     //     _ => false,
-    //     // }
-    // }
 }
 
 
@@ -326,3 +302,22 @@ pub fn acc_newton_bh(
         // .reduce(Vec3::new_zero, |acc, elem| acc + elem)
         .fold(Vec3::new_zero(), |acc, elem| acc + elem)
 }
+
+// fn partition_bodies_into_octants<'a> (
+//     bodies: &'a [&Body],
+//     bounding_box: &Cube,
+// ) -> [Vec<&'a Body>; 8] {
+//     let mut partitions: [Vec<&Body>; 8] = Default::default();
+//
+//     // todo: QC this maps correctly to the scheme you set up above.
+//     let center = bounding_box.center;
+//     for body in bodies {
+//         let mut index = 0;
+//         if body.posit.x > center.x { index |= 0b001; }
+//         if body.posit.y > center.y { index |= 0b010; }
+//         if body.posit.z > center.z { index |= 0b100; }
+//         partitions[index].push(body);
+//     }
+//
+//     partitions
+// }
