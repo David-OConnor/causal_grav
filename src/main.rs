@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 #![allow(non_ascii_idents)]
 
-use std::path::PathBuf;
-use std::time::Instant;
+use std::{path::PathBuf, time::Instant};
+
 use lin_alg::f64::Vec3;
 use rand::Rng;
 use rayon::prelude::*;
@@ -110,7 +110,7 @@ impl Default for Config {
             num_rings_bulge: 10,
             softening_factor_sq: 0.01,
             snapshot_ratio: 4,
-            barnes_hut_θ: 0.1,
+            barnes_hut_θ: 0.4,
         }
     }
 }
@@ -132,7 +132,9 @@ pub struct StateUi {
     snapshot_selected: usize,
     force_model: ForceModel,
     building: bool,
+    /// We include text input fields for user-typeable floats. Not required for int.
     dt_input: String,
+    θ_input: String,
     // num_timesteps_input: String,
     add_halo: bool, // todo: A/R
     galaxy_model: GalaxyModel,
@@ -149,6 +151,7 @@ impl Default for StateUi {
             force_model: Default::default(),
             building: Default::default(),
             dt_input: Default::default(),
+            θ_input: Default::default(),
             add_halo: Default::default(),
             galaxy_model,
             galaxy_descrip: galaxy_model.descrip(),
@@ -319,12 +322,36 @@ fn build(state: &mut State, force_model: ForceModel) {
         let bodies_other = state.bodies.clone(); // todo: I don't like this. Avoids mut error.
 
         let acc_fn = |id, posit| match force_model {
-            // ForceModel::Newton => accel::acc_newton(posit, id, &bodies_other,  None, state.config.softening_factor_sq),
-            ForceModel::Newton => accel::acc_newton_parallel(posit, id, &bodies_other,  None, state.config.softening_factor_sq),
-            ForceModel::GaussShells => {
-                accel::calc_acc_shell(&state.shells, posit, id, state.config.gauss_c, state.config.softening_factor_sq)
-            }
-            ForceModel::Mond(mond_fn) => accel::acc_newton(posit, id, &bodies_other, Some(mond_fn), state.config.softening_factor_sq),
+            // ForceModel::Newton => accel::acc_newton(
+            //     posit,
+            //     id,
+            //     &bodies_other,
+            //     None,
+            //     state.config.softening_factor_sq,
+            // ),
+            ForceModel::Newton => barnes_hut::acc_newton_bh(
+                posit,
+                id,
+                &bodies_other,
+                None,
+                state.config.barnes_hut_θ,
+                state.config.softening_factor_sq,
+            ),
+            ForceModel::GaussShells => accel::calc_acc_shell(
+                &state.shells,
+                posit,
+                id,
+                state.config.gauss_c,
+                state.config.softening_factor_sq,
+            ),
+            ForceModel::Mond(mond_fn) => barnes_hut::acc_newton_bh(
+                posit,
+                id,
+                &bodies_other,
+                Some(mond_fn),
+                state.config.barnes_hut_θ,
+                state.config.softening_factor_sq,
+            ),
         };
 
         // Calculate dt for this step, based on the closest/fastest rel velocity.
@@ -333,17 +360,19 @@ fn build(state: &mut State, force_model: ForceModel) {
         // todo: Static DT for now, or shells won't work.
         let dt = state.config.dt;
 
-
-        if t < 100 {
+        if t % 1_000 == 0 {
             start_time = Instant::now();
         }
-        state.bodies.
-            par_iter_mut()
+        state
+            .bodies
+            // .par_iter_mut()
+            .iter_mut()
             .enumerate()
             .for_each(|(id, body_acted_on)| {
-            body_acted_on.accel = acc_fn(id, body_acted_on.posit);
-        });
-        if t < 100 {
+                body_acted_on.accel = acc_fn(id, body_acted_on.posit);
+            });
+
+        if t % 1_000 == 0 {
             println!("N body time: {}us", start_time.elapsed().as_micros());
         }
 
@@ -357,7 +386,7 @@ fn build(state: &mut State, force_model: ForceModel) {
                 dt,
                 state.config.gauss_c,
                 force_model,
-                state.config.softening_factor_sq
+                state.config.softening_factor_sq,
             );
         }
 
@@ -383,6 +412,7 @@ fn main() {
     state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
     state.ui.dt_input = state.config.dt.to_string();
+    state.ui.θ_input = state.config.barnes_hut_θ.to_string();
 
     // todo: Don't auto-build, but we a graphics engine have a prob when we don't.
     state.take_snapshot(0., 0.); // Initial snapshot; t=0.

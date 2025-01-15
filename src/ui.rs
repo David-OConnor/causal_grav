@@ -1,5 +1,6 @@
 use egui::{Color32, Context, RichText, Slider, TopBottomPanel, Ui};
 use graphics::{EngineUpdates, Entity, Scene};
+use lin_alg::f32::{Quaternion, Vec3};
 
 use crate::{
     accel::MondFn,
@@ -8,8 +9,6 @@ use crate::{
     playback::{change_snapshot, SnapShot},
     ForceModel, State,
 };
-
-use lin_alg::f32::{Quaternion, Vec3};
 
 pub const ROW_SPACING: f32 = 10.;
 pub const COL_SPACING: f32 = 30.;
@@ -167,7 +166,6 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.checkbox(&mut state.ui.add_halo, "Add halo");
         });
         ui.horizontal(|ui| {
-
             ui.add_space(ROW_SPACING);
 
             ui.label("dt:");
@@ -195,6 +193,17 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             {
                 if let Ok(v) = val.parse::<usize>() {
                     state.config.num_timesteps = v * 1_000;
+                }
+            }
+
+            ui.label("θ:");
+            ui.add_sized(
+                [40., Ui::available_height(ui)],
+                egui::TextEdit::singleline(&mut state.ui.θ_input),
+            );
+            if ui.button("Save θ").clicked() {
+                if let Ok(v) = state.ui.θ_input.parse() {
+                    state.config.barnes_hut_θ = v;
                 }
             }
 
@@ -228,13 +237,23 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             if ui.button("Tree").clicked() {
                 // todo: Temp to draw the tree.
                 // todo: Of current snapshot.
-                let tree = crate::barnes_hut::Tree::new(&state.bodies, 9999, true);
+                let tree = crate::barnes_hut::Tree::new(
+                    &state.bodies,
+                    lin_alg::f64::Vec3::new(2., 2., 0.),
+                    9999,
+                    state.config.barnes_hut_θ,
+                    true,
+                );
 
-                // println!("\n\n\n Tree: {:.2?}\n\n\n", tree);
+                scene.entities = scene.entities.clone().into_iter().filter(|s| s.mesh != 1).collect();
 
-                for leaf in tree.get_leaves() {
+                let leaves= tree.get_leaves();
+                println!("Leaf count: {:?}", leaves.len());
+
+                for leaf in leaves{
                     let c = leaf.bounding_box.center;
-                    let posit = Vec3::new(c.x as f32, c.y as f32, c.z as f32) + Vec3::new(0., 0., 1.5);
+                    let posit =
+                        Vec3::new(c.x as f32, c.y as f32, c.z as f32) + Vec3::new(0., 0., 1.5);
 
                     scene.entities.push(Entity::new(
                         1,
@@ -244,9 +263,8 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                         (50., 100., 255.),
                         1.,
                     ));
-                    println!(" - {:?}", leaf.bounding_box);
-                    // println!(" t- {:?}", leaf.is_terminal());
                 }
+
                 engine_updates.entities = true;
             }
         });

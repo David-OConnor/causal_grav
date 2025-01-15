@@ -3,14 +3,13 @@
 //! This module contains acceleration calculations.
 
 use lin_alg::f64::Vec3;
+use rayon::prelude::*;
 
 use crate::{
     gaussian::{GaussianShell, AMP_SCALER},
     units::{A0_MOND, G},
     Body, GravShell,
 };
-
-use rayon::prelude::*;
 
 // /// Calculate the force acting on a body, given the local environment of gravity shells intersecting it.
 // pub fn acc_shells(
@@ -31,11 +30,22 @@ use rayon::prelude::*;
 
 /// A helper function, where the inputs are precomputed.
 /// `acc_dir` is a unit vector.
-pub(crate) fn acc_newton_inner(acc_dir: Vec3, src_mass: f64, dist: f64, softening_factor_sq: f64) -> Vec3 {
+pub(crate) fn acc_newton_inner(
+    acc_dir: Vec3,
+    src_mass: f64,
+    dist: f64,
+    softening_factor_sq: f64,
+) -> Vec3 {
     acc_dir * G * src_mass / (dist.powi(2) + softening_factor_sq)
 }
 
-pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, id_acted_on: usize, shell_c: f64, softening_factor_sq: f64) -> Vec3 {
+pub fn calc_acc_shell(
+    shells: &[GravShell],
+    posit: Vec3,
+    id_acted_on: usize,
+    shell_c: f64,
+    softening_factor_sq: f64,
+) -> Vec3 {
     let mut result = Vec3::new_zero();
 
     // todo: Once you have more than one body acting on a target, you need to change this, so you get
@@ -60,7 +70,12 @@ pub fn calc_acc_shell(shells: &[GravShell], posit: Vec3, id_acted_on: usize, she
         // let mass_kg = shell.src_mass * SOLAR_MASS;
         // let r_m = r * KPC;
 
-        result += acc_newton_inner(acc_dir, shell.src_mass * gauss.value(posit), dist, softening_factor_sq);
+        result += acc_newton_inner(
+            acc_dir,
+            shell.src_mass * gauss.value(posit),
+            dist,
+            softening_factor_sq,
+        );
     }
 
     result * AMP_SCALER
@@ -86,44 +101,9 @@ impl MondFn {
 /// An instantaneous acceleration computation, from all actors, on a single body acted on.
 /// Either Newtonian, or Newtonian modified with MOND.
 /// `mond_params` are `(a, a_0)`.
+///
+/// Uses Rayon for parallel execution. The functional approach is required for use with Rayon.
 pub fn acc_newton(
-    posit_acted_on: Vec3,
-    id_acted_on: usize,
-    bodies_other: &[Body],
-    mond: Option<MondFn>,
-    softening_factor_sq: f64,
-) -> Vec3 {
-    let mut result = Vec3::new_zero();
-
-    // Iterate over bodies acting on our target.
-    // for (i, body_actor) in bodies_other.iter().enumerate() {
-    for (i, body_actor) in bodies_other.iter().enumerate() {
-        if i == id_acted_on {
-            continue; // self-interaction.
-        }
-
-        let acc_diff = body_actor.posit - posit_acted_on;
-        let r = acc_diff.magnitude();
-        let acc_dir = acc_diff / r; // Unit vec
-
-        let mut acc = acc_newton_inner(acc_dir, body_actor.mass, r, softening_factor_sq);
-
-        if let Some(mond_fn) = mond {
-            // todo: This may not be correct. r may be the wrong arbgument?
-            // todo: Also, div/0 error.
-            let x = acc.magnitude() / A0_MOND;
-            acc = acc / mond_fn.μ(x)
-        }
-
-        result += acc;
-    }
-
-    result
-}
-
-/// Uses Rayon. Restructured to use its required functional approach.
-/// ~10x slower than the non-Rayon approach, from initial tests.
-pub fn acc_newton_parallel(
     posit_acted_on: Vec3,
     id_acted_on: usize,
     bodies_other: &[Body],
@@ -132,7 +112,8 @@ pub fn acc_newton_parallel(
 ) -> Vec3 {
     // Compute the result in parallel and then sum the contributions.
     bodies_other
-        .par_iter()
+        // .par_iter()
+        .iter()
         .enumerate()
         .filter_map(|(i, body_actor)| {
             if i == id_acted_on {
@@ -140,10 +121,10 @@ pub fn acc_newton_parallel(
             }
 
             let acc_diff = body_actor.posit - posit_acted_on;
-            let r = acc_diff.magnitude();
-            let acc_dir = acc_diff / r; // Unit vector.
+            let dist = acc_diff.magnitude();
+            let acc_dir = acc_diff / dist; // Unit vector.
 
-            let mut acc = acc_newton_inner(acc_dir, body_actor.mass, r, softening_factor_sq);
+            let mut acc = acc_newton_inner(acc_dir, body_actor.mass, dist, softening_factor_sq);
 
             if let Some(mond_fn) = mond {
                 let x = acc.magnitude() / A0_MOND;
@@ -152,7 +133,8 @@ pub fn acc_newton_parallel(
 
             Some(acc)
         })
-        .reduce(Vec3::new_zero, |acc, elem| acc + elem) // Sum the contributions.
+        // .reduce(Vec3::new_zero, |acc, elem| acc + elem) // Sum the contributions.
+        .fold(Vec3::new_zero(), |acc, elem| acc + elem) // Sum the contributions.
 }
 
 /// Finds the gravitomagnetic vector potential, analagous to magnetism in Maxwell's equations for EM.

@@ -8,10 +8,17 @@
 // todo: Should we store Trees recursively, or with a top level struct that has a
 // Vec of terminal nodes, and a vec of non-terminal ones?
 
-use egui::IdMap;
+
+// todo: You can use rayon more throughout this, e.g. during tree construction.
+
+
 use lin_alg::f64::Vec3;
 
+use rayon::prelude::*;
+
 use crate::{accel::acc_newton_inner, Body};
+use crate::accel::MondFn;
+use crate::units::A0_MOND;
 
 #[derive(Clone, Debug)]
 /// A cubical bounding box. length=width=depth.
@@ -128,20 +135,15 @@ impl Cube {
 #[derive(Debug)]
 enum NodeType {
     NonTerminal(Vec<Box<Tree>>),
-    Terminal(NodeTerminal),
+    Terminal
 }
 
 #[derive(Debug)]
-/// A terminal node, containing 0 or 1 body.
-struct NodeTerminal {
-    /// Inner: Body index.
-    body: Option<usize>,
-}
-
-#[derive(Debug)]
-/// A recursive tree. Terminates with `NodeType::NodeTerminal`.
+/// A recursive tree. Each node can be subdivided  Terminates with `NodeType::NodeTerminal`.
 pub struct Tree {
-    data: Box<NodeType>,
+    // todo: Consider replacing this with `children: Vec<Box<Tree>>`. Terminal means children is empty.
+    // data: Box<NodeType>,
+    children: Vec<Box<Tree>>,
     pub bounding_box: Cube, // todo temp pub?
     /// We use mass and center-of-mass to calculate Newtonian acceleration
     /// with an acted-on body.
@@ -149,95 +151,92 @@ pub struct Tree {
     center_of_mass: Vec3,
 }
 
+// todo: Consider converting this recursive struct to an iterative approach
+// todo: with an explicit stack to reduce function call overhead.
 impl Tree {
     /// Constructs a tree. Call this externaly using all bodies.
-    pub fn new(bodies:  &[Body], id_acted_on: usize, z_offset: bool) -> Self {
+    pub fn new(
+        bodies: &[Body],
+        posit_acted_on: Vec3,
+        id_acted_on: usize,
+        θ: f64,
+        z_offset: bool,
+    ) -> Self {
         let bb = Cube::from_bodies(bodies, z_offset).unwrap();
-        let body_ids: Vec<usize> = (0..bodies.len()).collect();
 
-        // Convert &[Body] to &[&Body]
-        let body_refs: Vec<&Body> = bodies.iter().collect();
-        Self::new_internal(&body_refs, &body_ids, &bb, id_acted_on)
+        // Convert &[Body] to &[&Body], and remove the acted-on body.
+        let body_refs: Vec<&Body> = bodies.iter().enumerate().filter(|(i, b)| i != *id_acted_on).collect();
+
+        let body_ids: Vec<usize> = (0..body_refs.len()).collect();
+        Self::new_internal(&body_refs, &body_ids, &bb, posit_acted_on, θ)
     }
 
     /// Constructs a tree. This can be called externally, but has a slightly lower-level API, requiring
     /// body IDs and a bounding box to be manually specified, for use during recursion.
     /// We assume that all bodies passed are inside the bounding box.
     /// `body_indices` must correspond to `bodies`.
-    // pub fn new_internal(bodies: &[Body], body_ids: &[usize], bb: &Cube, id_acted_on: usize) -> Self {
-    pub fn new_internal(bodies: &[&Body], body_ids: &[usize], bb: &Cube, id_acted_on: usize) -> Self {
+    pub fn new_internal(
+        bodies: &[&Body],
+        body_ids: &[usize],
+        bb: &Cube,
+        posit_acted_on: Vec3,
+        // id_acted_on: usize,
+        θ: f64,
+    ) -> Self {
+        let (center_of_mass, mass) = center_of_mass(bodies);
+
         let data = match bodies.len() {
-            0 => NodeType::Terminal(NodeTerminal { body: None }),
-            1 => NodeType::Terminal(NodeTerminal {
-                body: Some(body_ids[0]),
-            }),
+            // 0 | 1 => NodeType::Terminal,
+            0 | 1 => Vec::new(),
             _ => {
-                let octants = bb.divide_into_octants();
+                let dist = (posit_acted_on - center_of_mass).magnitude();
 
-                // Populate up to 8 children.
-                let mut children = Vec::new();
-                for octant in &octants {
-                    let mut bodies_this_octant = Vec::new();
-                    let mut body_indices_this_octant = Vec::new();
+                // The actor is far; group all bodies in this bounding box.
+                if bb.width / dist < θ {
+                    // NodeType::Terminal
+                    Vec::new()
+                } else {
+                    // The actor is close; continue subdividing.
+                    let octants = bb.divide_into_octants();
 
-                    for (i, body) in bodies.iter().enumerate() {
-                        if i == id_acted_on {
-                            continue // Exclude the body acted on from the tree.
+                    // Populate up to 8 children.
+                    let mut children = Vec::new();
+                    for octant in &octants {
+                        let mut bodies_this_octant = Vec::new();
+                        let mut body_indices_this_octant = Vec::new();
+
+                        for (i, body) in bodies.iter().enumerate() {
+                            // Todo: Use a more efficient method, perhaps, where you position
+                            // todo each body using > logic.
+                            if octant.contains(body.posit) {
+                                bodies_this_octant.push(*body);
+                                body_indices_this_octant.push(body_ids[i]);
+                            }
                         }
-                        // Todo: Use a more efficient method, perhaps, where you position
-                        // todo each body using > logic.
-                        if octant.contains(body.posit) {
-                            // bodies_this_octant.push(body.clone());
-                            bodies_this_octant.push(*body);
-                            body_indices_this_octant.push(body_ids[i]);
+                        if !bodies_this_octant.is_empty() {
+                            children.push(Box::new(Tree::new_internal(
+                                bodies_this_octant.as_slice(),
+                                &body_indices_this_octant,
+                                octant,
+                                posit_acted_on,
+                                // id_acted_on,
+                                θ,
+                            )))
                         }
                     }
-                    if !bodies_this_octant.is_empty() {
-                        children.push(Box::new(Tree::new_internal(
-                            bodies_this_octant.as_slice(),
-                            &body_indices_this_octant,
-                            octant,
-                            id_acted_on
-                        )))
-                    }
+
+                    // NodeType::NonTerminal(children)
+                    children
                 }
-
-                NodeType::NonTerminal(children)
             }
         };
 
-        // todo: Temp removed here.?
-        // let (center_of_mass, mass) = center_of_mass(bodies);
-        let (center_of_mass, mass) = (Vec3::new_zero(), 0.);
-
         Self {
-            data: Box::new(data),
-            bounding_box: bb.clone(),
+            children: data,
+            bounding_box: bb.clone(), // todo: Re
             mass,
             center_of_mass,
         }
-    }
-
-    /// Get all bosides
-    // fn get_bodies(&self) -> Vec<&Body> {
-    fn get_bodies(&self) -> Vec<usize> {
-        let mut result = Vec::new();
-        match self.data.as_ref() {
-            NodeType::NonTerminal(nodes) => {
-                // Recur
-                for node in nodes {
-                    result.extend(node.get_bodies());
-                }
-            }
-            NodeType::Terminal(node) => {
-                // Terminate recursion.
-                if let Some(body) = &node.body {
-                    result.push(*body);
-                }
-            }
-        }
-
-        result
     }
 
     /// For debugging only?
@@ -245,104 +244,39 @@ impl Tree {
     pub fn get_leaves(&self) -> Vec<&Self> {
         let mut result = Vec::new();
 
-        match self.data.as_ref() {
-            NodeType::NonTerminal(nodes) => {
-                // Recur
-                for node in nodes {
-                    result.extend(node.get_leaves());
-                }
+
+        // match self.data.as_ref() {
+        if !self.children.is_empty() {
+            // NodeType::NonTerminal(nodes) => {
+            // Recur
+            // for node in nodes {
+            for node in &self.children {
+                result.extend(node.get_leaves());
             }
-            NodeType::Terminal(node) => {
-                // Terminate recursion.
-                result.push(self);
-            }
+            // }
+            // NodeType::Terminal(_) => {
+            // NodeType::Terminal => {
+        } else {
+            // Terminate recursion.
+            result.push(self);
         }
 
         result
     }
-
-    // /// Calculates the position, and value of the center-of-mass. Run this once all sub-nodes of this are populated.
-    // fn update_mass(&mut self) {
-    //     (self.center_of_mass, self.mass) = center_of_mass(&self.get_bodies());
+    //
+    // fn is_terminal(&self) -> bool {
+    //     self.children.as_ref().is_empty()
+    //     // match self.data.as_ref() {
+    //     //     // NodeType::Terminal(_) => true,
+    //     //     NodeType::Terminal => true,
+    //     //     _ => false,
+    //     // }
     // }
-
-    fn is_terminal(&self) -> bool {
-        match self.data.as_ref() {
-            NodeType::Terminal(_) => true,
-            _ => false,
-        }
-    }
-
-    /// Gets the next node that should count towards the force calculation for the current particle.
-    ///
-    /// Whether a node is or isn't sufficiently far away from a body,
-    /// depends on the quotient s/d,
-    /// where s is the width of the region represented by the internal node,
-    /// and d is the distance between the body and the node's center of mass.
-    /// The node is sufficiently far away when this ratio is smaller than a threshold value θ.
-    /// The parameter θ determines the accuracy of the simulation;
-    /// larger values of θ increase the speed of the simulation but decreases its accuracy.
-    /// If θ = 0, no internal node is treated as a single body and the algorithm degenerates to a direct-sum algorithm.
-    fn collect_relevant_nodes<'a>(&'a self, posit_acted_on: Vec3, θ: f64, results: &mut Vec<&'a Tree>) {
-        let dist = (posit_acted_on - self.center_of_mass).magnitude();
-        let s = self.bounding_box.width;
-
-        if s / dist < θ {
-            // If the node is far enough, add it to the results.
-            results.push(self);
-            return;
-        }
-
-        // Otherwise, traverse into child nodes if this is a non-terminal node.
-        if let NodeType::NonTerminal(ref children) = *self.data {
-            for child in children {
-                child.collect_relevant_nodes(posit_acted_on, θ, results);
-            }
-        }
-    }
 }
 
-#[derive(Clone, Copy, PartialEq)]
-enum NodeTypeAlt {
-    NonTerminal,
-    Terminal,
-}
-
-pub struct LeafAlt {
-    bb: Cube,
-    children_nonterminal: Vec<usize>,
-    children_terminal: Vec<usize>,
-}
-
-pub struct NodeTerminalAlt {
-    bb: Cube,
-    body: Option<usize>, // Index
-}
-
-/// An alternate approach, where we store nodes in a flat manner, and index them.
-pub struct TreeAlt {
-    // limits: GridLimits,
-    // bodies: Vec<Body>,
-    bodies: Vec<usize>, // Body index
-    /// All non-terminal nodes.
-    leaves: Vec<LeafAlt>,
-    /// All terminal nodes. None means no body.
-    nodes_terminal: Vec<NodeTerminalAlt>, // Body indices
-}
-
-impl TreeAlt {
-    pub fn new(bodies: &Vec<Body>) -> Self {
-        Self {
-            bodies: Vec::new(),         // todo temp
-            leaves: Vec::new(),         // todo temp
-            nodes_terminal: Vec::new(), // todo temp
-        }
-    }
-}
 
 /// Compute center of mass as a position, and mass value.
-// fn center_of_mass(bodies: &[&Body]) -> (Vec3, f64) {
-fn center_of_mass(bodies: &[Body]) -> (Vec3, f64) {
+fn center_of_mass(bodies: &[&Body]) -> (Vec3, f64) {
     let mut mass = 0.;
     let mut center_of_mass = Vec3::new_zero();
 
@@ -360,35 +294,35 @@ fn center_of_mass(bodies: &[Body]) -> (Vec3, f64) {
 }
 
 /// Calculate Newtonian acceleration using the Barnes Hut algorithm.
-pub fn calc_acc_bh(
+pub fn acc_newton_bh(
     posit_acted_on: Vec3,
     id_acted_on: usize,
-    bodies_other: &mut [Body],
+    bodies_other: &[Body],
+    mond: Option<MondFn>,
     θ: f64,
     softening_factor_sq: f64,
 ) -> Vec3 {
-    let tree = Tree::new(bodies_other, id_acted_on, true);
-    let mut relevant_nodes = Vec::new();
+    // todo: The tree building is taking too long.
+    let tree = Tree::new(bodies_other, posit_acted_on, id_acted_on, θ, true);
 
-    tree.collect_relevant_nodes(posit_acted_on, θ, &mut relevant_nodes);
+    // Self-interaction is prevented. in the tree construction.
+    tree.get_leaves()
+        // .par_iter()
+        .iter()
+        .map(|leaf| {
+            let acc_diff = leaf.center_of_mass - posit_acted_on;
+            let dist = acc_diff.magnitude();
+            let acc_dir = acc_diff / dist; // Unit vec
 
-    let mut result = Vec3::new_zero();
+            let mut acc = acc_newton_inner(acc_dir, leaf.mass, dist, softening_factor_sq);
 
-    // Compute acceleration contributions from each relevant node.
-    for node in relevant_nodes {
-        let acc_diff = node.center_of_mass - posit_acted_on;
-        let dist = acc_diff.magnitude();
-        let acc_dir = acc_diff / dist; // Unit vec
+            if let Some(mond_fn) = mond {
+                let x = acc.magnitude() / A0_MOND;
+                acc = acc / mond_fn.μ(x);
+            }
 
-        // Skip self-interaction.
-        if dist < f64::EPSILON {
-            continue;
-        }
-
-        let acc_contribution = acc_newton_inner(acc_dir, node.mass, dist,softening_factor_sq);
-        result += acc_contribution;
-    }
-
-
-    result
+            acc
+        })
+        // .reduce(Vec3::new_zero, |acc, elem| acc + elem)
+        .fold(Vec3::new_zero(), |acc, elem| acc + elem)
 }
