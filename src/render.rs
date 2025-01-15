@@ -2,20 +2,26 @@
 
 use std::f32::consts::TAU;
 
+use egui::Color32;
 use graphics::{
-    Camera, ControlScheme, DeviceEvent, EngineUpdates, InputSettings, LightType, Lighting, Mesh,
-    PointLight, Scene, UiLayout, UiSettings,
+    Camera, ControlScheme, DeviceEvent, EngineUpdates, Entity, InputSettings, LightType, Lighting,
+    Mesh, PointLight, Scene, UiLayout, UiSettings,
 };
 use lin_alg::f32::{Quaternion, Vec3};
 
-use crate::{playback::change_snapshot, ui::ui_handler, State};
+use crate::{
+    barnes_hut::Cube,
+    playback::{change_snapshot, Vec3f32},
+    ui::ui_handler,
+    State,
+};
 
 type Color = (f32, f32, f32);
 
 const WINDOW_TITLE: &str = "Causal gravity model";
 const WINDOW_SIZE_X: f32 = 1_600.;
 const WINDOW_SIZE_Y: f32 = 1_000.;
-const BACKGROUND_COLOR: Color = (0.0, 0.0, 0.0);
+const BACKGROUND_COLOR: Color = (0.1, 0.1, 0.1);
 
 const RENDER_DIST: f32 = 200.;
 
@@ -49,6 +55,7 @@ pub fn render(state: State) {
     let mut scene = Scene {
         meshes: vec![
             Mesh::new_sphere(1., 12, 12),
+            Mesh::new_box(1., 1., 1.),
             // todo: Mesh for partial sphere.
         ],
         entities: Vec::new(), // updated below.
@@ -106,6 +113,30 @@ pub fn render(state: State) {
             &state.snapshots[state.ui.snapshot_selected],
             &state.body_masses,
         )
+    }
+
+    {
+        // // todo: Temp to draw the tree.
+        let bb = Cube::from_bodies(&state.bodies).unwrap();
+        let body_ids: Vec<usize> = (0..state.bodies.len()).collect();
+        let tree = crate::barnes_hut::Tree::new(&state.bodies, &body_ids, &bb);
+
+        println!("\n\n\n Tree: {:.2?}\n\n\n", tree);
+
+        for child in tree.get_all_children() {
+            let c = child.bounding_box.center;
+            let posit = Vec3::new(c.x as f32, c.y as f32, c.z as f32) + Vec3::new(0., 0., 1.5);
+
+            scene.entities.push(Entity::new(
+                1,
+                posit,
+                Quaternion::new_identity(),
+                child.bounding_box.width as f32 * 0.9,
+                (50., 100., 255.),
+                BODY_SHINYNESS,
+            ));
+            println!(" - {:?}", child.bounding_box);
+        }
     }
 
     graphics::run(

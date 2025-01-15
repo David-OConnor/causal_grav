@@ -34,31 +34,6 @@ impl OctTree {
     fn is_divided(&self) -> bool {
         !self.children.is_none()
     }
-
-    fn subdivide(&mut self) {
-        let (x, y, z) = (self.bounds.top_left_fwd_pos.x, self.bounds.top_left_fwd_pos.y, self.bounds.top_left_fwd_pos.z);
-        let (w, h, d) = (self.bounds.w, self.bounds.h, self.bounds.d);
-
-        let top_left_f = Cube::new(Vec3::new(x, y, z), w / 2.0, h / 2.0, d/2.);
-        let top_right_f = Cube::new(Vec3::new(x + w / 2.0, y, z), w / 2.0, h / 2.0, d/2.);
-        let bottom_left_f = Cube::new(Vec3::new(x, y + h / 2.0, z), w / 2.0, h / 2.0, d/2.);
-        let bottom_right_f = Cube::new(Vec3::new(x + w / 2.0, y + h / 2.0, z), w / 2.0, h / 2.0, d/2.);
-
-        let top_left_a = Cube::new(Vec3::new(x, y, z), w / 2.0, h / 2.0, d/2.);
-        let top_right_a = Cube::new(Vec3::new(x + w / 2.0, y, z + d/2.), w / 2.0, h / 2.0, d/2.);
-        let bottom_left_a = Cube::new(Vec3::new(x, y + h / 2.0, z + d/2.), w / 2.0, h / 2.0, d/2.);
-        let bottom_right_a = Cube::new(Vec3::new(x + w / 2.0, y + h / 2.0, z + d/2.), w / 2.0, h / 2.0, d/2.);
-        
-        self.children = Some([
-            Box::new(OctTree::new(top_left_f)),
-            Box::new(OctTree::new(top_right_f)),
-            Box::new(OctTree::new(bottom_left_f)),
-            Box::new(OctTree::new(bottom_right_f)),
-            Box::new(OctTree::new(top_left_a)),
-            Box::new(OctTree::new(top_right_a)),
-            Box::new(OctTree::new(bottom_left_a)),
-            Box::new(OctTree::new(bottom_right_a)),
-        ]);
     }
 
     pub fn insert(&mut self, body: &Body) {

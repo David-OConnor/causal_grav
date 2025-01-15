@@ -82,19 +82,20 @@ impl MondFn {
 /// An instantaneous acceleration computation. Either Newtonian, or Newtonian modified with MOND.
 /// `mond_params` are `(a, a_0)`.
 pub fn acc_newton(
-    posit: Vec3,
+    posit_acted_on: Vec3,
     bodies_other: &[Body],
     id_acted_on: usize,
     mond: Option<MondFn>,
 ) -> Vec3 {
     let mut result = Vec3::new_zero();
 
+    // Iterate over bodies acting on our target.
     for (i, body_src) in bodies_other.iter().enumerate() {
         if i == id_acted_on {
             continue; // self-interaction.
         }
 
-        let acc_diff = body_src.posit - posit;
+        let acc_diff = body_src.posit - posit_acted_on;
         let r = acc_diff.magnitude();
         let acc_dir = acc_diff / r; // Unit vec
 

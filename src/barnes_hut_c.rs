@@ -5,22 +5,6 @@ use crate::Body;
 use lin_alg::f64::Vec3;
 use crate::barnes_hut::BoundingBox;
 
-fn in_bounds(v: Vec3, min: Vec3, max: Vec3) -> bool {
-    v.x >= min.x && v.x <= max.x &&
-        v.y >= min.y && v.y <= max.y &&
-        v.z >= min.z && v.z <= max.z
-}
-
-
-const EPSILON: f64 = 1e-4;
-
-/// Computes the l2 norm of a 2d vector represented by x1, y1, x2, y2
-fn l2(x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
-    let dx: f64 = x2 - x1;
-    let dy: f64 = y2 - y1;
-    (dx * dx + dy * dy).sqrt()
-}
-
 /// Definition of the mass quadtree
 #[derive(Debug)]
 pub struct MassOcttree {
