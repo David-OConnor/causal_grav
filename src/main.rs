@@ -342,7 +342,6 @@ fn build(state: &mut State, force_model: ForceModel) {
         let mut tree = None;
         if force_model != ForceModel::GaussShells {
             tree = Some(Tree::new(&state.bodies, &bb));
-            tree = Some(Tree {nodes: Vec::new()});
         }
 
         // This approach avoids a borrow problem that occurs if mutating bodies directly.
