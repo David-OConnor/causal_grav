@@ -112,8 +112,8 @@ pub fn acc_newton(
 ) -> Vec3 {
     // Compute the result in parallel and then sum the contributions.
     bodies_other
-        // .par_iter()
-        .iter()
+        .par_iter()
+        // .iter()
         .enumerate()
         .filter_map(|(i, body_actor)| {
             if i == id_acted_on {
@@ -133,8 +133,8 @@ pub fn acc_newton(
 
             Some(acc)
         })
-        // .reduce(Vec3::new_zero, |acc, elem| acc + elem) // Sum the contributions.
-        .fold(Vec3::new_zero(), |acc, elem| acc + elem) // Sum the contributions.
+        .reduce(Vec3::new_zero, |acc, elem| acc + elem) // Sum the contributions.
+        // .fold(Vec3::new_zero(), |acc, elem| acc + elem) // Sum the contributions.
 }
 
 /// Finds the gravitomagnetic vector potential, analagous to magnetism in Maxwell's equations for EM.

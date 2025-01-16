@@ -377,8 +377,7 @@ fn build(state: &mut State, force_model: ForceModel) {
         }
         state
             .bodies
-            // .par_iter_mut()
-            .iter_mut()
+            .par_iter_mut()
             .enumerate()
             .for_each(|(id, body_acted_on)| {
                 body_acted_on.accel = acc_fn(id, body_acted_on.posit);

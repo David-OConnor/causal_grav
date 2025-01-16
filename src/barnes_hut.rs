@@ -135,6 +135,7 @@ impl Cube {
 #[derive(Debug)]
 // todo: Implement with flat structure.
 struct Node {
+    pub bounding_box: Cube,
     mass: f64,
     center_of_mass: Vec3,
     children: Vec<usize>, // Tree stack index.
@@ -143,13 +144,13 @@ struct Node {
 #[derive(Debug)]
 /// A recursive tree. Each node can be subdivided  Terminates with `NodeType::NodeTerminal`.
 pub struct Tree {
-    // nodes: Vec<Node>,
-    children: Vec<Box<Tree>>,
-    pub bounding_box: Cube, // todo temp pub?
-    /// We use mass and center-of-mass to calculate Newtonian acceleration
-    /// with an acted-on body.
-    mass: f64,
-    center_of_mass: Vec3,
+    nodes: Vec<Node>,
+    // children: Vec<Box<Tree>>,
+    // pub bounding_box: Cube,
+    // /// We use mass and center-of-mass to calculate Newtonian acceleration
+    // /// with an acted-on body.
+    // mass: f64,
+    // center_of_mass: Vec3,
 }
 
 // todo: Consider converting this recursive struct to an iterative approach
@@ -187,7 +188,7 @@ impl Tree {
         let (center_of_mass, mass) = center_of_mass(bodies);
 
         let data = match bodies.len() {
-            0 | 1 => Vec::new(),
+            0 | 1 => Vec::new(), // todo: Introduce a variable cap, i.e. not always 1.
             _ => {
                 let dist = (posit_acted_on - center_of_mass).magnitude();
 
@@ -307,8 +308,8 @@ pub fn acc_newton_bh(
 
     // Self-interaction is prevented. in the tree construction.
     tree.leaves()
-        // .par_iter()
-        .iter()
+        .par_iter()
+        // .iter()
         .map(|leaf| {
             let acc_diff = leaf.center_of_mass - posit_acted_on;
             let dist = acc_diff.magnitude();
@@ -323,8 +324,8 @@ pub fn acc_newton_bh(
 
             acc
         })
-        // .reduce(Vec3::new_zero, |acc, elem| acc + elem)
-        .fold(Vec3::new_zero(), |acc, elem| acc + elem)
+        .reduce(Vec3::new_zero, |acc, elem| acc + elem)
+        // .fold(Vec3::new_zero(), |acc, elem| acc + elem)
 }
 
 // fn partition_bodies_into_octants<'a> (
