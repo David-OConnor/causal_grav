@@ -42,7 +42,7 @@ pub(crate) fn acc_newton_inner(
 pub fn calc_acc_shell(
     shells: &[GravShell],
     posit: Vec3,
-    id_acted_on: usize,
+    id_target: usize,
     shell_c: f64,
     softening_factor_sq: f64,
 ) -> Vec3 {
@@ -51,7 +51,7 @@ pub fn calc_acc_shell(
     // todo: Once you have more than one body acting on a target, you need to change this, so you get
     // todo exactly 0 or 1 shells per other body.
     for shell in shells {
-        if shell.emitter_id == id_acted_on {
+        if shell.emitter_id == id_target {
             continue;
         }
 
@@ -98,14 +98,14 @@ impl MondFn {
     }
 }
 
-/// An instantaneous acceleration computation, from all actors, on a single body acted on.
+/// An instantaneous acceleration computation, from all sources, on a single target.
 /// Either Newtonian, or Newtonian modified with MOND.
 /// `mond_params` are `(a, a_0)`.
 ///
 /// Uses Rayon for parallel execution. The functional approach is required for use with Rayon.
 pub fn acc_newton(
-    posit_acted_on: Vec3,
-    id_acted_on: usize,
+    posit_target: Vec3,
+    id_target: usize,
     bodies_other: &[Body],
     mond: Option<MondFn>,
     softening_factor_sq: f64,
@@ -115,16 +115,16 @@ pub fn acc_newton(
         .par_iter()
         // .iter()
         .enumerate()
-        .filter_map(|(i, body_actor)| {
-            if i == id_acted_on {
+        .filter_map(|(i, body_source)| {
+            if i == id_target {
                 return None; // Skip self-interaction.
             }
 
-            let acc_diff = body_actor.posit - posit_acted_on;
+            let acc_diff = body_source.posit - posit_target;
             let dist = acc_diff.magnitude();
             let acc_dir = acc_diff / dist; // Unit vector.
 
-            let mut acc = acc_newton_inner(acc_dir, body_actor.mass, dist, softening_factor_sq);
+            let mut acc = acc_newton_inner(acc_dir, body_source.mass, dist, softening_factor_sq);
 
             if let Some(mond_fn) = mond {
                 let x = acc.magnitude() / A0_MOND;

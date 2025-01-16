@@ -5,9 +5,6 @@
 //!
 //! todo: If you can make this general enough, publish it as a standalone library.
 
-// todo: Should we store Trees recursively, or with a top level struct that has a
-// Vec of terminal nodes, and a vec of non-terminal ones?
-
 // todo: You can use rayon more throughout this, e.g. during tree construction.
 
 use lin_alg::f64::Vec3;
@@ -18,6 +15,8 @@ use crate::{
     units::A0_MOND,
     Body,
 };
+
+const MAX_BODIES_PER_NODE: usize = 1;
 
 #[derive(Clone, Debug)]
 /// A cubical bounding box. length=width=depth.
@@ -134,144 +133,41 @@ impl Cube {
 
 #[derive(Debug)]
 // todo: Implement with flat structure.
-struct Node {
+pub struct Node {
     pub bounding_box: Cube,
     mass: f64,
     center_of_mass: Vec3,
-    children: Vec<usize>, // Tree stack index.
 }
 
 #[derive(Debug)]
 /// A recursive tree. Each node can be subdivided  Terminates with `NodeType::NodeTerminal`.
 pub struct Tree {
-    nodes: Vec<Node>,
-    // children: Vec<Box<Tree>>,
-    // pub bounding_box: Cube,
-    // /// We use mass and center-of-mass to calculate Newtonian acceleration
-    // /// with an acted-on body.
-    // mass: f64,
-    // center_of_mass: Vec3,
+    pub nodes: Vec<Node>,
 }
 
-// todo: Consider converting this recursive struct to an iterative approach
-// todo: with an explicit stack to reduce function call overhead.
 impl Tree {
     /// Constructs a tree. Call this externaly using all bodies.
     pub fn new(
         bodies: &[Body],
         bb: &Cube,
-        posit_acted_on: Vec3,
-        id_acted_on: usize,
-        θ: f64,
+        // posit_target: Vec3,
+        // id_target: usize,
+        // θ: f64,
     ) -> Self {
-        // Convert &[Body] to &[&Body], and remove the acted-on body.
+        // Convert &[Body] to &[&Body], and remove the target body.
         let body_refs: Vec<&Body> = bodies
             .iter()
-            .enumerate()
-            .filter(|(i, b)| *i != id_acted_on)
-            .map(|v| v.1)
+            // .enumerate()
+            // .filter(|(i, b)| *i != id_target)
+            // .map(|v| v.1)
             .collect();
 
-        Self::new_internal(&body_refs, bb, posit_acted_on, θ)
-    }
+        let mut nodes = Vec::new();
+        // populate_nodes(&mut nodes, &body_refs, bb, posit_target, θ);
+        populate_nodes(&mut nodes, &body_refs, bb);
 
-    /// Constructs a tree. This can be called externally, but has a slightly lower-level API, requiring
-    /// a bounding box to be manually specified, for use during recursion.
-    /// We assume that all bodies passed are inside the bounding box.
-    /// `body_indices` must correspond to `bodies`.
-    pub fn new_internal(
-        bodies: &[&Body],
-        bb: &Cube,
-        posit_acted_on: Vec3,
-        θ: f64,
-    ) -> Self {
-        let (center_of_mass, mass) = center_of_mass(bodies);
+        Self { nodes }
 
-        let data = match bodies.len() {
-            0 | 1 => Vec::new(), // todo: Introduce a variable cap, i.e. not always 1.
-            _ => {
-                let dist = (posit_acted_on - center_of_mass).magnitude();
-
-                // The actor is far; group all bodies in this bounding box.
-                if bb.width / dist < θ {
-                    Vec::new()
-                } else {
-                    // The actor is close; continue subdividing.
-
-                    // Populate up to 8 children.
-                    let mut children = Vec::new();
-                    let octants = bb.divide_into_octants();
-
-                    // todo: Arrs? slices
-                    // todo: What a mess; problem with the [Vec::new(), ;8] syntax.
-                    let mut bodies_by_octant: [Vec<&Body>; 8] = [
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                        Vec::new(),
-                    ];
-                    // let mut bodys_by_octant = [Vec::new(); 8];
-
-                    for body in bodies {
-                        let mut index = 0;
-                        if body.posit.x > bb.center.x {
-                            index |= 0b001;
-                        }
-                        if body.posit.y > bb.center.y {
-                            index |= 0b010;
-                        }
-                        if body.posit.z > bb.center.z {
-                            index |= 0b100;
-                        }
-
-                        bodies_by_octant[index].push(body);
-                    }
-
-                    for (i, octant) in octants.into_iter().enumerate() {
-                        if !bodies_by_octant[i].is_empty() {
-                            children.push(Box::new(Tree::new_internal(
-                                bodies_by_octant[i].as_slice(),
-                                &octant,
-                                posit_acted_on,
-                                θ,
-                            )))
-                        }
-                    }
-
-                    children
-                }
-            }
-        };
-
-        Self {
-            children: data,
-            bounding_box: bb.clone(), // todo: Another way?
-            mass,
-            center_of_mass,
-        }
-    }
-
-    /// For debugging only?
-    /// Get all the terminal nodes (i.e. that contain 0 or 1 bodies, and no sub-nodes containing bodies)
-    pub fn leaves(&self) -> Vec<&Self> {
-        let mut result = Vec::new();
-
-        if !self.children.is_empty() {
-            // NodeType::NonTerminal(nodes) => {
-            // Recur
-            for node in &self.children {
-                result.extend(node.leaves());
-            }
-        } else {
-            // Terminate recursion.
-            result.push(self);
-        }
-
-        result
     }
 }
 
@@ -293,25 +189,108 @@ fn center_of_mass(bodies: &[&Body]) -> (Vec3, f64) {
     (center_of_mass, mass)
 }
 
+
+/// Recursively populate nodes of the tree. This contains the bulk of the Barnes Hut algorithm.
+// fn populate_nodes(nodes: &mut Vec<Node>, bodies: &[&Body], bb: &Cube, posit_target: Vec3, θ: f64) {
+fn populate_nodes(nodes: &mut Vec<Node>, bodies: &[&Body], bb: &Cube) {
+    // todo: Is this at the core? At least the initial one can be cached.
+    //todo: I suspect the fix is a more fundamental change than that.
+    let (center_of_mass, mass) = center_of_mass(bodies);
+
+    if bodies.len() <= MAX_BODIES_PER_NODE {
+        nodes.push(Node {
+            bounding_box: bb.clone(), // todo...
+            mass,
+            center_of_mass,
+        })
+    } else {
+        // let dist = (posit_target - center_of_mass).magnitude();
+        //
+        // // The source is far; group all bodies in this bounding box.
+        // if bb.width / dist < θ {
+        //     nodes.push(Node {
+        //         bounding_box: bb.clone(), // todo...
+        //         mass,
+        //         center_of_mass,
+        //     })
+        // } else {
+            // The source is close; continue subdividing.
+
+            // Populate up to 8 children.
+            let octants = bb.divide_into_octants();
+            let bodies_by_octant = partition(bodies, bb);
+
+            for (i, octant) in octants.into_iter().enumerate() {
+                if !bodies_by_octant[i].is_empty() {
+                    populate_nodes(
+                        nodes,
+                        bodies_by_octant[i].as_slice(),
+                        &octant,
+                        // posit_target,
+                        // θ,
+                    )
+                }
+            }
+            // octants
+            //     .into_par_iter()
+            //     .zip(bodies_by_octant.into_par_iter())
+            //     .filter(|(_, bodies)| !bodies.is_empty())
+            //     .for_each(|(octant, bodies)| {
+            //         populate_nodes(nodes, bodies.as_slice(), &octant, posit_target, θ);
+            //     });
+        // }
+    }
+}
+
+/// Partition bodies into each of the 8 octants.
+fn partition<'a>(bodies: &[&'a Body], bb: &Cube) -> [Vec<&'a Body>; 8] {
+    let mut result: [Vec<&Body>; 8] = Default::default();
+
+    for body in bodies {
+        let mut index = 0;
+        if body.posit.x > bb.center.x {
+            index |= 0b001;
+        }
+        if body.posit.y > bb.center.y {
+            index |= 0b010;
+        }
+        if body.posit.z > bb.center.z {
+            index |= 0b100;
+        }
+
+        result[index].push(body);
+    }
+
+    result
+}
+
 /// Calculate Newtonian acceleration using the Barnes Hut algorithm.
 pub fn acc_newton_bh(
-    posit_acted_on: Vec3,
-    id_acted_on: usize,
-    bodies_other: &[Body],
-    bb: &Cube,
-    mond: Option<MondFn>,
+    posit_target: Vec3,
+    id_target: usize,
+    // bodies_other: &[Body],
+    // bb: &Cube,
+    tree: &Tree,
     θ: f64,
+    mond: Option<MondFn>,
     softening_factor_sq: f64,
 ) -> Vec3 {
     // todo: The tree building is taking too long.
-    let tree = Tree::new(bodies_other, bb, posit_acted_on, id_acted_on, θ);
+    // let tree = Tree::new(bodies_other, bb, posit_target, id_target, θ);
+
+    println!("Node len: {:?}", tree.nodes.len());
+
+    // todo: Put back the part checking for self interaction.
 
     // Self-interaction is prevented. in the tree construction.
-    tree.leaves()
+    tree.nodes
+        // .par_chunks(32) // Process in chunks
+        // .map(|chunk| {
+        //     chunk.iter().map(|leaf| {
         .par_iter()
         // .iter()
         .map(|leaf| {
-            let acc_diff = leaf.center_of_mass - posit_acted_on;
+            let acc_diff = leaf.center_of_mass - posit_target;
             let dist = acc_diff.magnitude();
             let acc_dir = acc_diff / dist; // Unit vec
 
@@ -325,24 +304,5 @@ pub fn acc_newton_bh(
             acc
         })
         .reduce(Vec3::new_zero, |acc, elem| acc + elem)
-        // .fold(Vec3::new_zero(), |acc, elem| acc + elem)
+    // .fold(Vec3::new_zero(), |acc, elem| acc + elem)
 }
-
-// fn partition_bodies_into_octants<'a> (
-//     bodies: &'a [&Body],
-//     bounding_box: &Cube,
-// ) -> [Vec<&'a Body>; 8] {
-//     let mut partitions: [Vec<&Body>; 8] = Default::default();
-//
-//     // todo: QC this maps correctly to the scheme you set up above.
-//     let center = bounding_box.center;
-//     for body in bodies {
-//         let mut index = 0;
-//         if body.posit.x > center.x { index |= 0b001; }
-//         if body.posit.y > center.y { index |= 0b010; }
-//         if body.posit.z > center.z { index |= 0b100; }
-//         partitions[index].push(body);
-//     }
-//
-//     partitions
-// }

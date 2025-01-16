@@ -15,7 +15,7 @@ use crate::{
     render::render,
     units::{A0_MOND, C},
 };
-use crate::barnes_hut::Cube;
+use crate::barnes_hut::{Cube, Tree};
 
 mod accel;
 mod body_creation;
@@ -218,7 +218,7 @@ struct Body {
     accel: Vec3,
     mass: f64,
     // /// We use this for debugging, testing etc. It goes in the snapshots.
-    // V_acting_on: Vec3,
+    // V_source: Vec3,
 }
 
 impl Body {
@@ -304,67 +304,30 @@ fn build(state: &mut State, force_model: ForceModel) {
     let mut bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
 
     for t in 0..state.config.num_timesteps {
-        // Create a new set of rays.
-        if force_model == ForceModel::GaussShells && t % state.config.shell_creation_ratio == 0 {
-            for (id, body) in state.bodies.iter().enumerate() {
-                // for _ in 0..state.config.num_rays_per_iter {
-                // state.rays.push(body.create_ray(id));
-                // }
-                state.shells.push(body.create_shell(id));
+        if force_model == ForceModel::GaussShells {
+            if t % state.config.shell_creation_ratio == 0 {
+                for (id, body) in state.bodies.iter().enumerate() {
+                    // for _ in 0..state.config.num_rays_per_iter {
+                    // state.rays.push(body.create_ray(id));
+                    // }
+                    state.shells.push(body.create_shell(id));
+                }
+            }
+            for shell in &mut state.shells {
+                shell.radius += C * state.config.dt;
             }
         }
 
-        // Update ray propogation
-        // integrate::integrate_rk4_ray(&mut state.rays, state.config.dt_integration);
-
-        // state.remove_far_rays();
-        state.remove_far_shells();
-
-        for shell in &mut state.shells {
-            shell.radius += C * state.config.dt;
+        if t % state.config.shell_creation_ratio == 0 {
+            state.remove_far_shells(); // Note grouped above due to a borrow problem.
         }
 
         // todo: C+P from integrate, so we can test acc vals.
-        let bodies_other = state.bodies.clone(); // todo: I don't like this. Avoids mut error.
+        // let bodies_other = state.bodies.clone(); // todo: I don't like this. Avoids mut error.
 
         if t % BB_GEN_RATIO == 0 {
             bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
         }
-
-        let acc_fn = |id, posit| match force_model {
-            // ForceModel::Newton => accel::acc_newton(
-            //     posit,
-            //     id,
-            //     &bodies_other,
-            //     None,
-            //     state.config.softening_factor_sq,
-            // ),
-            ForceModel::Newton => barnes_hut::acc_newton_bh(
-                posit,
-                id,
-                &bodies_other,
-                &bb,
-                None,
-                state.config.barnes_hut_θ,
-                state.config.softening_factor_sq,
-            ),
-            ForceModel::GaussShells => accel::calc_acc_shell(
-                &state.shells,
-                posit,
-                id,
-                state.config.gauss_c,
-                state.config.softening_factor_sq,
-            ),
-            ForceModel::Mond(mond_fn) => barnes_hut::acc_newton_bh(
-                posit,
-                id,
-                &bodies_other,
-                &bb,
-                Some(mond_fn),
-                state.config.barnes_hut_θ,
-                state.config.softening_factor_sq,
-            ),
-        };
 
         // Calculate dt for this step, based on the closest/fastest rel velocity.
         // This affects motion integration only; not shell creation.
@@ -375,16 +338,67 @@ fn build(state: &mut State, force_model: ForceModel) {
         if t % 1_000 == 0 {
             start_time = Instant::now();
         }
-        state
+
+        let mut tree = None;
+        if force_model != ForceModel::GaussShells {
+            tree = Some(Tree::new(&state.bodies, &bb));
+            tree = Some(Tree {nodes: Vec::new()});
+        }
+
+        // This approach avoids a borrow problem that occurs if mutating bodies directly.
+        let accs: Vec<Vec3> = state
             .bodies
-            .par_iter_mut()
+            .par_iter()
             .enumerate()
-            .for_each(|(id, body_acted_on)| {
-                body_acted_on.accel = acc_fn(id, body_acted_on.posit);
-            });
+            .map(|(id_target, body_target)| {
+                match force_model {
+                    // ForceModel::Newton => accel::acc_newton(
+                    //     body_target.posit,
+                    //     id,
+                    //     &bodies_other,
+                    //     None,
+                    //     state.config.softening_factor_sq,
+                    // ),
+                    ForceModel::Newton =>
+                        barnes_hut::acc_newton_bh(
+                            body_target.posit,
+                            id_target,
+                            &tree.as_ref().unwrap(),
+                            // &bodies_other,
+                            // &state.bodies,
+                            // &bb,
+                            state.config.barnes_hut_θ,
+                            None,
+                            state.config.softening_factor_sq,
+                        ),
+                    ForceModel::GaussShells => accel::calc_acc_shell(
+                        &state.shells,
+                        body_target.posit,
+                        id_target,
+                        state.config.gauss_c,
+                        state.config.softening_factor_sq,
+                    ),
+                    ForceModel::Mond(mond_fn) =>
+                        barnes_hut::acc_newton_bh(
+                            body_target.posit,
+                            id_target,
+                            &tree.as_ref().unwrap(),
+                            // &bodies_other,
+                            // &state.bodies,
+                            // &bb,
+                            state.config.barnes_hut_θ,
+                            Some(mond_fn),
+                            state.config.softening_factor_sq,
+                        ),
+                }
+            }).collect();
 
         if t % 1_000 == 0 {
             println!("N body time: {}us", start_time.elapsed().as_micros());
+        }
+
+        for (i, body) in state.bodies.iter_mut().enumerate() {
+            body.accel = accs[i]
         }
 
         state.time_elapsed += dt;
