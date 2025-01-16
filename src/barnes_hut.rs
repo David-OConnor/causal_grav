@@ -134,7 +134,9 @@ impl Cube {
 #[derive(Debug)]
 // todo: Implement with flat structure.
 pub struct Node {
-    pub id: usize, // todo: Remove A/R. Ideally, we use indices.
+    /// We use `id` while building the tree, then sort by it, replacing with index.
+    /// Once complete, `id` == index in `Tree::nodes`.
+    pub id: usize,
     pub bounding_box: Cube,
     /// Node indices in the tree. We use this to guide the transversal process while finding
     /// relevant nodes for a given target body.
@@ -146,6 +148,7 @@ pub struct Node {
 #[derive(Debug)]
 /// A recursive tree. Each node can be subdivided  Terminates with `NodeType::NodeTerminal`.
 pub struct Tree {
+    /// Order matters; we index this by `Node::children`.
     pub nodes: Vec<Node>,
 }
 
@@ -169,11 +172,14 @@ impl Tree {
         let mut current_node_i: usize = 0;
         populate_nodes(&mut nodes, &body_refs, bb, &mut current_node_i);
 
+        // Now that nodes are populated, rearrange so index == `id`. We will then index by `children`.
+        nodes.sort_by(|l, r| l.id.partial_cmp(&r.id).unwrap());
+
         Self { nodes }
     }
 
 
-    /// Recursive function called when getting leaves.
+    /// Recursive function called for getting leaves relevant to a given target.
     fn leaves_inner<'a>(&'a self, leaves: &mut Vec<&'a Node>, node_i: usize, posit_target: Vec3, id_target: usize, θ: f64) {
         let mut node = &self.nodes[node_i];
 
@@ -183,7 +189,7 @@ impl Tree {
 
         if dist < 1e-8 {
             // todo: Better way, using id_target?
-            println!("Attempting to avoid self-interaction");
+            // println!("Attempting to avoid self-interaction");
             return;
         }
 
@@ -194,7 +200,7 @@ impl Tree {
         } else {
             // The source is near; go deeper.
             for child_i in &node.children {
-                self.leaves_inner(leaves, child_i, posit_target, id_target, θ);
+                self.leaves_inner(leaves, *child_i, posit_target, id_target, θ);
             }
         }
     }
@@ -251,41 +257,37 @@ fn populate_nodes(nodes: &mut Vec<Node>, bodies: &[&Body], bb: &Cube, current_no
         });
             *current_node_i += 1;
     } else {
-        // Populate up to 8 children.
+        // If the node is not a leaf, divide into octants and recursively populate.
         let octants = bb.divide_into_octants();
         let bodies_by_octant = partition(bodies, bb);
 
-        let node_i_this =  *current_node_i;
+        let node_id = *current_node_i; // Reserve the current node ID.
+        *current_node_i += 1; // Increment for subsequent nodes.
 
         let mut children = Vec::new();
-        for bodies in &bodies_by_octant {
-            if !bodies.is_empty() {
-                // todo QC off-by-one etc.
 
-                // todo: Wrong.
-                *current_node_i += 1;
-                children.push(*current_node_i);
+        for (i, octant) in octants.into_iter().enumerate() {
+            if !bodies_by_octant[i].is_empty() {
+                // Populate the child nodes recursively.
+                let child_node_id = *current_node_i; // Record the ID before recursion.
+                populate_nodes(
+                    nodes,
+                    bodies_by_octant[i].as_slice(),
+                    &octant,
+                    current_node_i,
+                );
+                children.push(child_node_id); // Push the correct ID after recursion.
             }
         }
 
         nodes.push(Node {
-            id: node_i_this,
+            id: node_id,
             bounding_box: bb.clone(), // todo: Way around this?
             mass,
             center_of_mass,
             children,
         });
 
-        for (i, octant) in octants.into_iter().enumerate() {
-            if !bodies_by_octant[i].is_empty() {
-                populate_nodes(
-                    nodes,
-                    bodies_by_octant[i].as_slice(),
-                    &octant,
-                    current_node_i,
-                )
-            }
-        }
         // octants
         //     .into_par_iter()
         //     .zip(bodies_by_octant.into_par_iter())

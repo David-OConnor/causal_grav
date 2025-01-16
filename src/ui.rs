@@ -175,8 +175,6 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 }
             }
 
-            // ui.add_space(COL_SPACING/2.);
-
             ui.label("Steps (x1000):");
             let mut val = (state.config.num_timesteps / 1_000).to_string();
             if ui
@@ -201,8 +199,6 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                     state.config.barnes_hut_θ = v;
                 }
             }
-
-            // ui.add_space(COL_SPACING);
 
             int_field(
                 &mut state.config.num_bodies_disk,
@@ -236,9 +232,6 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 let tree = Tree::new(
                     &state.bodies,
                     &bb,
-                    // lin_alg::f64::Vec3::new(2., 2., 0.),
-                    // 99999,
-                    // state.config.barnes_hut_θ,
                 );
 
                 // todo: Subdivide the tree based on a target body here A/R.
@@ -250,8 +243,11 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                     .filter(|s| s.mesh != 1)
                     .collect();
 
-                // let leaves = tree.leaves();
-                let leaves = &tree.nodes;
+                for leaf in &tree.nodes {
+                    println!("Node. Id: {}, W: {:?}, Ch: {:?}", leaf.id, leaf.bounding_box.width, leaf.children);
+                }
+
+                let leaves = tree.leaves(lin_alg::f64::Vec3::new(2., 2., 0.), 99999, state.config.barnes_hut_θ);
                 println!("Leaf count: {:?}", leaves.len());
 
                 for leaf in leaves {
