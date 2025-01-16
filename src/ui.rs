@@ -212,24 +212,24 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 &mut redraw_bodies,
                 ui,
             );
-            int_field(
-                &mut state.config.num_rings_disk,
-                "rings disk",
-                &mut redraw_bodies,
-                ui,
-            );
+            // int_field(
+            //     &mut state.config.num_rings_disk,
+            //     "rings disk",
+            //     &mut redraw_bodies,
+            //     ui,
+            // );
             int_field(
                 &mut state.config.num_bodies_bulge,
                 "bodies bulge",
                 &mut redraw_bodies,
                 ui,
             );
-            int_field(
-                &mut state.config.num_rings_bulge,
-                "rings bulge",
-                &mut redraw_bodies,
-                ui,
-            );
+            // int_field(
+            //     &mut state.config.num_rings_bulge,
+            //     "rings bulge",
+            //     &mut redraw_bodies,
+            //     ui,
+            // );
 
             if ui.button("Tree").clicked() {
                 // todo: Of current snapshot.
@@ -293,6 +293,10 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
     });
 
     if redraw_bodies {
+        // todo: We don't need to change rings for all cases of `redraw_bodies`, but this is harmless
+        state.config.num_rings_disk = state.config.num_bodies_disk / 10; // todo: Delegate this.
+        state.config.num_rings_bulge = state.config.num_bodies_bulge / 10; // todo: Delegate this.
+
         state.bodies = state.ui.galaxy_descrip.make_bodies(
             state.config.num_bodies_disk,
             state.config.num_rings_disk,

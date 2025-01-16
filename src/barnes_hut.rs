@@ -173,7 +173,7 @@ impl Tree {
     ///
     /// We partially transverse it as-required while calculating the force on a given target.
     pub fn new(bodies: &[Body], bb: &Cube) -> Self {
-        // Convert &[Body] to &[&Body], and remove the target body.
+        // Convert &[Body] to &[&Body].
         let body_refs: Vec<&Body> = bodies.iter().collect();
 
         let mut nodes = Vec::new();
@@ -200,10 +200,10 @@ impl Tree {
                 });
                 current_node_i += 1;
 
-                if let Some(parent_id) = parent_id {
-                    // nodes[parent_id].children.push(node_id);
+                if let Some(pid) = parent_id {
+                    // nodes[pid].children.push(node_id);
                     // todo: Odd: Rust is requesting an explicit type...
-                    let a: &mut Node = &mut nodes[parent_id];
+                    let a: &mut Node = &mut nodes[pid];
                     a.children.push(node_id);
                 }
             } else {
@@ -219,10 +219,10 @@ impl Tree {
                     children: Vec::new(),
                 });
 
-                if let Some(parent_id) = parent_id {
-                    // nodes[parent_id].children.push(node_id);
+                if let Some(pid) = parent_id {
+                    // nodes[pid].children.push(node_id);
                     // todo: Odd: Rust is requesting an explicit type...
-                    let a: &mut Node = &mut nodes[parent_id];
+                    let a: &mut Node = &mut nodes[pid];
                     a.children.push(node_id);
                 }
 
@@ -343,14 +343,17 @@ pub fn acc_newton_bh(
 ) -> Vec3 {
     // todo: Put back the part checking for self interaction.
     tree.leaves(posit_target, id_target, θ)
-        // .par_chunks(32) // Process in chunks
-        // .map(|chunk| {
-        //     chunk.iter().map(|leaf| {
-        // .par_iter()
-        .iter()
-        .map(|leaf| {
+        .par_iter()
+        .filter_map(|leaf| {
             let acc_diff = leaf.center_of_mass - posit_target;
             let dist = acc_diff.magnitude();
+
+            // todo: Not sure why we get 0 here when we check it in `leaves()`.
+            // todo: QC this.
+            if dist < 1e-8 {
+                return None;
+            }
+
             let acc_dir = acc_diff / dist; // Unit vec
 
             let mut acc = acc_newton_inner(acc_dir, leaf.mass, dist, softening_factor_sq);
@@ -360,8 +363,7 @@ pub fn acc_newton_bh(
                 acc = acc / mond_fn.μ(x);
             }
 
-            acc
+            Some(acc)
         })
-        // .reduce(Vec3::new_zero, |acc, elem| acc + elem)
-        .fold(Vec3::new_zero(), |acc, elem| acc + elem)
+        .reduce(Vec3::new_zero, |acc, elem| acc + elem)
 }

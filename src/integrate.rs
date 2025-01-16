@@ -1,30 +1,39 @@
-use crate::{accel, Body, ForceModel, GravShell};
+use rayon::prelude::*;
+
+use crate::{accel, barnes_hut, barnes_hut::Tree, Body, ForceModel, GravShell};
 
 pub fn integrate_rk4(
     bodies: &mut [Body],
     shells: &[GravShell],
     dt: f64,
     gauss_c: f64,
+    tree: &Tree,
+    θ: f64,
     force_model: ForceModel,
     softening_factor_sq: f64,
 ) {
-    let bodies_other = bodies.to_owned(); // todo: I don't like this. Avoids mut error.
-
-    let acc = |id, posit| match force_model {
+    // todo: You must update this acc using your tree approach.
+    let acc = |id_target, posit_target| match force_model {
         ForceModel::Newton => {
-            accel::acc_newton(posit, id, &bodies_other, None, softening_factor_sq)
+            // accel::acc_newton(posit, id, &bodies_other, None, softening_factor_sq)
+            barnes_hut::acc_newton_bh(posit_target, id_target, tree, θ, None, softening_factor_sq)
         }
-        ForceModel::GaussShells => {
-            accel::calc_acc_shell(shells, posit, id, gauss_c, softening_factor_sq)
-        }
+        ForceModel::GaussShells => accel::calc_acc_shell(
+            shells,
+            posit_target,
+            id_target,
+            gauss_c,
+            softening_factor_sq,
+        ),
         ForceModel::Mond(mond_fn) => {
-            accel::acc_newton(posit, id, &bodies_other, Some(mond_fn), softening_factor_sq)
+            // accel::acc_newton(posit_target, id_target, &bodies_other, Some(mond_fn), softening_factor_sq)
+            barnes_hut::acc_newton_bh(posit_target, id_target, tree, θ, None, softening_factor_sq)
         }
     };
 
-    for (id, body) in bodies.iter_mut().enumerate() {
+    bodies.par_iter_mut().enumerate().for_each(|(id, body)| {
         // Step 1: Calculate the k-values for position and velocity
-        // body.accel = acc(id, body.posit); // todo: Temp placed before fn.
+        body.accel = acc(id, body.posit);
 
         let k1_v = body.accel * dt;
         let k1_pos = body.vel * dt;
@@ -44,5 +53,5 @@ pub fn integrate_rk4(
         // Step 2: Update position and velocity using weighted average of k-values
         body.vel += (k1_v + k2_v * 2. + k3_v * 2. + k4_v) / 6.;
         body.posit += (k1_pos + k2_pos * 2. + k3_pos * 2. + k4_pos) / 6.;
-    }
+    });
 }

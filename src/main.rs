@@ -90,7 +90,6 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        // let dt = 3.0e-8;
         let dt = 2.0e-3;
         let shell_creation_ratio = 12;
 
@@ -98,6 +97,13 @@ impl Default for Config {
 
         // In distance: t * d/t = d.
         let shell_spacing = dt * shell_creation_ratio as f64 * C;
+
+        let num_bodies_disk = 300;
+        let num_bodies_bulge = 100;
+
+        // todo: Delegate this.
+        let num_rings_disk = num_bodies_disk / 10;
+        let num_rings_bulge = num_bodies_bulge / 10;
 
         Self {
             num_timesteps: 5_000,
@@ -108,10 +114,10 @@ impl Default for Config {
             dynamic_dt_scaler: 0.1, // not used.
             // num_rays_per_iter: 200,
             gauss_c: shell_spacing * COEFF_C,
-            num_bodies_disk: 130,
-            num_rings_disk: 16,
-            num_bodies_bulge: 60,
-            num_rings_bulge: 10,
+            num_bodies_disk,
+            num_rings_disk,
+            num_bodies_bulge,
+            num_rings_bulge,
             softening_factor_sq: 0.01,
             snapshot_ratio: 4,
             barnes_hut_θ: 0.4,
@@ -300,16 +306,22 @@ fn build(state: &mut State, force_model: ForceModel) {
     );
 
     let mut start_time = Instant::now();
+    let mut start_time_tree = Instant::now();
+    let mut start_time_integ = Instant::now();
+    // let mut start_time_general = Instant::now();
 
     let mut bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
 
+    const BENCH_RATIO: usize = 1_000;
+
     for t in 0..state.config.num_timesteps {
+        // if t % BENCH_RATIO == 0 {
+        //     start_time_general = Instant::now();
+        // }
+
         if force_model == ForceModel::GaussShells {
             if t % state.config.shell_creation_ratio == 0 {
                 for (id, body) in state.bodies.iter().enumerate() {
-                    // for _ in 0..state.config.num_rays_per_iter {
-                    // state.rays.push(body.create_ray(id));
-                    // }
                     state.shells.push(body.create_shell(id));
                 }
             }
@@ -318,17 +330,19 @@ fn build(state: &mut State, force_model: ForceModel) {
             }
         }
 
-        if t % state.config.shell_creation_ratio == 0 {
+        if force_model == ForceModel::GaussShells && t % state.config.shell_creation_ratio == 0 {
             state.remove_far_shells(); // Note grouped above due to a borrow problem.
         }
 
-        // todo: C+P from integrate, so we can test acc vals.
-        // let bodies_other = state.bodies.clone(); // todo: I don't like this. Avoids mut error.
-
-        // todo: Put bakc.
+        // todo: Put back.
         // if t % BB_GEN_RATIO == 0 {
         bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
         // }
+
+        if bb.width.is_nan() {
+            eprintln!("Error: NaN");
+            return;
+        }
 
         // Calculate dt for this step, based on the closest/fastest rel velocity.
         // This affects motion integration only; not shell creation.
@@ -336,98 +350,64 @@ fn build(state: &mut State, force_model: ForceModel) {
         // todo: Static DT for now, or shells won't work.
         let dt = state.config.dt;
 
-        if t % 1_000 == 0 {
-            start_time = Instant::now();
+        if t % BENCH_RATIO == 0 {
+            start_time_tree = Instant::now();
         }
 
         let mut tree = None;
         if force_model != ForceModel::GaussShells {
             tree = Some(Tree::new(&state.bodies, &bb));
-            println!("\nTree size: {:?}", tree.as_ref().unwrap().nodes.len()); // todo temp
-            for node in &tree.as_ref().unwrap().nodes {
-                println!("Node: {node}");
-            }
         }
 
-        println!("T Iterr");
-        // This approach avoids a borrow problem that occurs if mutating bodies directly.
-        let accs: Vec<Vec3> = state
-            .bodies
-            // .par_iter()
-            .iter()
-            .enumerate()
-            .map(|(id_target, body_target)| {
-                // for (id_target, body_target) in state.bodies.iter_mut().enumerate() {
-                println!("LOOP");
-                match force_model {
-                    // body_target.accel = match force_model {
-                    // ForceModel::Newton => accel::acc_newton(
-                    //     body_target.posit,
-                    //     id,
-                    //     &bodies_other,
-                    //     None,
-                    //     state.config.softening_factor_sq,
-                    // ),
-                    ForceModel::Newton => barnes_hut::acc_newton_bh(
-                        body_target.posit,
-                        id_target,
-                        &tree.as_ref().unwrap(),
-                        // &bodies_other,
-                        // &state.bodies,
-                        // &bb,
-                        state.config.barnes_hut_θ,
-                        None,
-                        state.config.softening_factor_sq,
-                    ),
-                    ForceModel::GaussShells => accel::calc_acc_shell(
-                        &state.shells,
-                        body_target.posit,
-                        id_target,
-                        state.config.gauss_c,
-                        state.config.softening_factor_sq,
-                    ),
-                    ForceModel::Mond(mond_fn) => barnes_hut::acc_newton_bh(
-                        body_target.posit,
-                        id_target,
-                        &tree.as_ref().unwrap(),
-                        // &bodies_other,
-                        // &state.bodies,
-                        // &bb,
-                        state.config.barnes_hut_θ,
-                        Some(mond_fn),
-                        state.config.softening_factor_sq,
-                    ),
-                }
-            })
-            .collect();
+        if t % BENCH_RATIO == 0 {
+            println!("Tree time: {}μs", start_time_tree.elapsed().as_micros());
+            // start_time = Instant::now();
+        }
+
+        // Benchmarking, 100k bodies, 2025-01-16, theta = 0.4, BH algo.
+        // Without rayon: Tree time: 51ms. N body time: 1,371ms
+        // With rayon: Tree time: 51ms N body time: 144ms (Solid speedup)
+
+        // if t % BENCH_RATIO == 0 {
+        //     println!("N body time: {}μs", start_time.elapsed().as_micros());
         // }
-
-        if t % 1_000 == 0 {
-            println!("N body time: {}us", start_time.elapsed().as_micros());
-        }
-
-        for (i, body) in state.bodies.iter_mut().enumerate() {
-            body.accel = accs[i]
-        }
 
         state.time_elapsed += dt;
 
+        if t % BENCH_RATIO == 0 {
+            start_time_integ = Instant::now();
+        }
         if force_model != ForceModel::GaussShells || state.time_elapsed > integrate_start_t {
+            // for body in &mut state.bodies {
+            //     body.vel += body.accel * dt;
+            //     body.posit += body.vel * dt;
+            // }
+
             // Update body motion.
             integrate::integrate_rk4(
                 &mut state.bodies,
                 &state.shells,
                 dt,
                 state.config.gauss_c,
+                &tree.as_ref().unwrap(),
+                state.config.barnes_hut_θ,
                 force_model,
                 state.config.softening_factor_sq,
             );
+        }
+
+        if t % BENCH_RATIO == 0 {
+            println!("Integ time: {}μs", start_time_integ.elapsed().as_micros());
         }
 
         // Save the current state to a snapshot, for later playback.
         if t % state.config.snapshot_ratio == 0 {
             state.take_snapshot(state.time_elapsed, dt);
         }
+
+        // if t % BENCH_RATIO == 0 {
+        //     println!("General time: {}μs", start_time_general.elapsed().as_micros());
+        // }
     }
 
     state.ui.building = false;
