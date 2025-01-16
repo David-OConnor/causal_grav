@@ -15,6 +15,7 @@ use crate::{
     render::render,
     units::{A0_MOND, C},
 };
+use crate::barnes_hut::Cube;
 
 mod accel;
 mod body_creation;
@@ -62,6 +63,9 @@ mod barnes_hut;
 // scales inverse proportionally to propogation speed C.) for a given generation rate
 //
 // Some sort of cumulative drag?? Can we estimate and test this?
+
+const BOUNDING_BOX_PAD: f64 = 0.3;
+const BB_GEN_RATIO: usize = 5;
 
 pub struct Config {
     num_timesteps: usize,
@@ -297,6 +301,8 @@ fn build(state: &mut State, force_model: ForceModel) {
 
     let mut start_time = Instant::now();
 
+    let mut bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
+
     for t in 0..state.config.num_timesteps {
         // Create a new set of rays.
         if force_model == ForceModel::GaussShells && t % state.config.shell_creation_ratio == 0 {
@@ -321,6 +327,10 @@ fn build(state: &mut State, force_model: ForceModel) {
         // todo: C+P from integrate, so we can test acc vals.
         let bodies_other = state.bodies.clone(); // todo: I don't like this. Avoids mut error.
 
+        if t % BB_GEN_RATIO == 0 {
+            bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
+        }
+
         let acc_fn = |id, posit| match force_model {
             // ForceModel::Newton => accel::acc_newton(
             //     posit,
@@ -333,6 +343,7 @@ fn build(state: &mut State, force_model: ForceModel) {
                 posit,
                 id,
                 &bodies_other,
+                &bb,
                 None,
                 state.config.barnes_hut_θ,
                 state.config.softening_factor_sq,
@@ -348,6 +359,7 @@ fn build(state: &mut State, force_model: ForceModel) {
                 posit,
                 id,
                 &bodies_other,
+                &bb,
                 Some(mond_fn),
                 state.config.barnes_hut_θ,
                 state.config.softening_factor_sq,

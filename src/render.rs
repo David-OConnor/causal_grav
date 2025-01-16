@@ -10,8 +10,7 @@ use graphics::{
 use lin_alg::f32::{Quaternion, Vec3};
 
 use crate::{
-    barnes_hut::Cube,
-    playback::{change_snapshot, Vec3f32},
+    playback::{change_snapshot},
     ui::ui_handler,
     State,
 };

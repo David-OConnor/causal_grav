@@ -8,17 +8,16 @@
 // todo: Should we store Trees recursively, or with a top level struct that has a
 // Vec of terminal nodes, and a vec of non-terminal ones?
 
-
 // todo: You can use rayon more throughout this, e.g. during tree construction.
 
-
 use lin_alg::f64::Vec3;
-
 use rayon::prelude::*;
 
-use crate::{accel::acc_newton_inner, Body};
-use crate::accel::MondFn;
-use crate::units::A0_MOND;
+use crate::{
+    accel::{acc_newton_inner, MondFn},
+    units::A0_MOND,
+    Body,
+};
 
 #[derive(Clone, Debug)]
 /// A cubical bounding box. length=width=depth.
@@ -35,12 +34,15 @@ pub struct Cube {
 }
 
 impl Cube {
-    /// Construct minimum limits that encompass all bodies.
+    /// Construct minimum limits that encompass all bodies. Run these each time the bodies change,
+    /// or perhaps use a pad and do it at a coarser interval.
+    ///
+    /// The pad allows us to keep the same cube for multiple timesteps, but taking into acacount
+    /// potential movement of bodies outside the cube between these updates.
+    ///
     /// The z offset is intended for the case where the Z coordinate for all particles is 0.
     /// This prevents the divisions straddling the points, doubling the number of nodes.
-    pub fn from_bodies(bodies: &[Body], z_offset: bool) -> Option<Self> {
-        // todo: You could also accept a pad, and run this
-        // periodically instead of eacy time.
+    pub fn from_bodies(bodies: &[Body], pad: f64,  z_offset: bool) -> Option<Self> {
         if bodies.is_empty() {
             return None;
         }
@@ -62,6 +64,13 @@ impl Cube {
             z_max = z_max.max(p.z);
         }
 
+        x_min -= pad;
+        x_max += pad;
+        y_min -= pad;
+        y_max += pad;
+        z_min -= pad;
+        z_max += pad;
+
         if z_offset {
             z_max += 1e-5;
         }
@@ -74,7 +83,7 @@ impl Cube {
         let mut width = x_size.max(y_size).max(z_size);
         let width_div2 = width / 2.;
 
-        let mut center = Vec3::new(
+        let center = Vec3::new(
             (x_max + x_min) / 2.,
             (y_max + y_min) / 2.,
             (z_max + z_min) / 2.,
@@ -124,14 +133,17 @@ impl Cube {
 }
 
 #[derive(Debug)]
-enum NodeType {
-    NonTerminal(Vec<Box<Tree>>),
-    Terminal
+// todo: Implement with flat structure.
+struct Node {
+    mass: f64,
+    center_of_mass: Vec3,
+    children: Vec<usize>, // Tree stack index.
 }
 
 #[derive(Debug)]
 /// A recursive tree. Each node can be subdivided  Terminates with `NodeType::NodeTerminal`.
 pub struct Tree {
+    // nodes: Vec<Node>,
     children: Vec<Box<Tree>>,
     pub bounding_box: Cube, // todo temp pub?
     /// We use mass and center-of-mass to calculate Newtonian acceleration
@@ -146,28 +158,29 @@ impl Tree {
     /// Constructs a tree. Call this externaly using all bodies.
     pub fn new(
         bodies: &[Body],
+        bb: &Cube,
         posit_acted_on: Vec3,
         id_acted_on: usize,
         θ: f64,
-        z_offset: bool,
     ) -> Self {
-        let bb = Cube::from_bodies(bodies, z_offset).unwrap();
-
         // Convert &[Body] to &[&Body], and remove the acted-on body.
-        let body_refs: Vec<&Body> = bodies.iter().enumerate().filter(|(i, b)| *i != id_acted_on).map(|v| v.1).collect();
+        let body_refs: Vec<&Body> = bodies
+            .iter()
+            .enumerate()
+            .filter(|(i, b)| *i != id_acted_on)
+            .map(|v| v.1)
+            .collect();
 
-        let body_ids: Vec<usize> = (0..body_refs.len()).collect();
-        Self::new_internal(&body_refs, &body_ids, bb, posit_acted_on, θ)
+        Self::new_internal(&body_refs, bb, posit_acted_on, θ)
     }
 
     /// Constructs a tree. This can be called externally, but has a slightly lower-level API, requiring
-    /// body IDs and a bounding box to be manually specified, for use during recursion.
+    /// a bounding box to be manually specified, for use during recursion.
     /// We assume that all bodies passed are inside the bounding box.
     /// `body_indices` must correspond to `bodies`.
     pub fn new_internal(
         bodies: &[&Body],
-        body_ids: &[usize],
-        bb: Cube,
+        bb: &Cube,
         posit_acted_on: Vec3,
         θ: f64,
     ) -> Self {
@@ -187,30 +200,41 @@ impl Tree {
                     // Populate up to 8 children.
                     let mut children = Vec::new();
                     let octants = bb.divide_into_octants();
-                    // let partitions = partition_bodies_into_octants(bodies, &bb);
 
                     // todo: Arrs? slices
                     // todo: What a mess; problem with the [Vec::new(), ;8] syntax.
-                    let mut bodies_by_octant: [Vec<&Body>; 8] = [Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new() ];
-                    // let mut body_ids_by_octant = [Vec::new(); 8];
-                    let mut body_ids_by_octant = [Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new() ];
+                    let mut bodies_by_octant: [Vec<&Body>; 8] = [
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                    ];
+                    // let mut bodys_by_octant = [Vec::new(); 8];
 
-                    for (i, body) in bodies.iter().enumerate() {
+                    for body in bodies {
                         let mut index = 0;
-                        if body.posit.x > bb.center.x { index |= 0b001; }
-                        if body.posit.y > bb.center.y { index |= 0b010; }
-                        if body.posit.z > bb.center.z { index |= 0b100; }
+                        if body.posit.x > bb.center.x {
+                            index |= 0b001;
+                        }
+                        if body.posit.y > bb.center.y {
+                            index |= 0b010;
+                        }
+                        if body.posit.z > bb.center.z {
+                            index |= 0b100;
+                        }
 
                         bodies_by_octant[index].push(body);
-                        body_ids_by_octant[index].push(i);
                     }
 
                     for (i, octant) in octants.into_iter().enumerate() {
                         if !bodies_by_octant[i].is_empty() {
                             children.push(Box::new(Tree::new_internal(
                                 bodies_by_octant[i].as_slice(),
-                                &body_ids_by_octant[i],
-                                octant,
+                                &octant,
                                 posit_acted_on,
                                 θ,
                             )))
@@ -224,7 +248,7 @@ impl Tree {
 
         Self {
             children: data,
-            bounding_box: bb,
+            bounding_box: bb.clone(), // todo: Another way?
             mass,
             center_of_mass,
         }
@@ -232,14 +256,14 @@ impl Tree {
 
     /// For debugging only?
     /// Get all the terminal nodes (i.e. that contain 0 or 1 bodies, and no sub-nodes containing bodies)
-    pub fn get_leaves(&self) -> Vec<&Self> {
+    pub fn leaves(&self) -> Vec<&Self> {
         let mut result = Vec::new();
 
         if !self.children.is_empty() {
             // NodeType::NonTerminal(nodes) => {
             // Recur
             for node in &self.children {
-                result.extend(node.get_leaves());
+                result.extend(node.leaves());
             }
         } else {
             // Terminate recursion.
@@ -249,7 +273,6 @@ impl Tree {
         result
     }
 }
-
 
 /// Compute center of mass as a position, and mass value.
 fn center_of_mass(bodies: &[&Body]) -> (Vec3, f64) {
@@ -274,15 +297,16 @@ pub fn acc_newton_bh(
     posit_acted_on: Vec3,
     id_acted_on: usize,
     bodies_other: &[Body],
+    bb: &Cube,
     mond: Option<MondFn>,
     θ: f64,
     softening_factor_sq: f64,
 ) -> Vec3 {
     // todo: The tree building is taking too long.
-    let tree = Tree::new(bodies_other, posit_acted_on, id_acted_on, θ, true);
+    let tree = Tree::new(bodies_other, bb, posit_acted_on, id_acted_on, θ);
 
     // Self-interaction is prevented. in the tree construction.
-    tree.get_leaves()
+    tree.leaves()
         // .par_iter()
         .iter()
         .map(|leaf| {

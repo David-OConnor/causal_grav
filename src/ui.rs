@@ -2,13 +2,8 @@ use egui::{Color32, Context, RichText, Slider, TopBottomPanel, Ui};
 use graphics::{EngineUpdates, Entity, Scene};
 use lin_alg::f32::{Quaternion, Vec3};
 
-use crate::{
-    accel::MondFn,
-    body_creation::GalaxyModel,
-    build,
-    playback::{change_snapshot, SnapShot},
-    ForceModel, State,
-};
+use crate::{accel::MondFn, body_creation::GalaxyModel, build, playback::{change_snapshot, SnapShot}, ForceModel, State, BOUNDING_BOX_PAD};
+use crate::barnes_hut::Cube;
 
 pub const ROW_SPACING: f32 = 10.;
 pub const COL_SPACING: f32 = 30.;
@@ -235,22 +230,28 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             );
 
             if ui.button("Tree").clicked() {
-                // todo: Temp to draw the tree.
                 // todo: Of current snapshot.
+                let bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
+
                 let tree = crate::barnes_hut::Tree::new(
                     &state.bodies,
+                    &bb,
                     lin_alg::f64::Vec3::new(2., 2., 0.),
                     9999,
                     state.config.barnes_hut_θ,
-                    true,
                 );
 
-                scene.entities = scene.entities.clone().into_iter().filter(|s| s.mesh != 1).collect();
+                scene.entities = scene
+                    .entities
+                    .clone()
+                    .into_iter()
+                    .filter(|s| s.mesh != 1)
+                    .collect();
 
-                let leaves= tree.get_leaves();
+                let leaves = tree.leaves();
                 println!("Leaf count: {:?}", leaves.len());
 
-                for leaf in leaves{
+                for leaf in leaves {
                     let c = leaf.bounding_box.center;
                     let posit =
                         Vec3::new(c.x as f32, c.y as f32, c.z as f32) + Vec3::new(0., 0., 1.5);
@@ -259,7 +260,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                         1,
                         posit,
                         Quaternion::new_identity(),
-                        leaf.bounding_box.width as f32 * 0.9,
+                        leaf.bounding_box.width as f32 * 0.85,
                         (50., 100., 255.),
                         1.,
                     ));
