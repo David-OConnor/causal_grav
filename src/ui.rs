@@ -2,8 +2,14 @@ use egui::{Color32, Context, RichText, Slider, TopBottomPanel, Ui};
 use graphics::{EngineUpdates, Entity, Scene};
 use lin_alg::f32::{Quaternion, Vec3};
 
-use crate::{accel::MondFn, body_creation::GalaxyModel, build, playback::{change_snapshot, SnapShot}, ForceModel, State, BOUNDING_BOX_PAD};
-use crate::barnes_hut::{Cube, Tree};
+use crate::{
+    accel::MondFn,
+    barnes_hut::{Cube, Tree},
+    body_creation::GalaxyModel,
+    build,
+    playback::{change_snapshot, SnapShot},
+    ForceModel, State, BOUNDING_BOX_PAD,
+};
 
 pub const ROW_SPACING: f32 = 10.;
 pub const COL_SPACING: f32 = 30.;
@@ -229,10 +235,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 // todo: Of current snapshot.
                 let bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
 
-                let tree = Tree::new(
-                    &state.bodies,
-                    &bb,
-                );
+                let tree = Tree::new(&state.bodies, &bb);
 
                 // todo: Subdivide the tree based on a target body here A/R.
 
@@ -244,10 +247,14 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                     .collect();
 
                 for leaf in &tree.nodes {
-                    println!("Node. Id: {}, W: {:?}, Ch: {:?}", leaf.id, leaf.bounding_box.width, leaf.children);
+                    // println!("Node. {}", leaf);
                 }
 
-                let leaves = tree.leaves(lin_alg::f64::Vec3::new(2., 2., 0.), 99999, state.config.barnes_hut_θ);
+                let leaves = tree.leaves(
+                    lin_alg::f64::Vec3::new(2., 2., 0.),
+                    99999,
+                    state.config.barnes_hut_θ,
+                );
                 println!("Leaf count: {:?}", leaves.len());
 
                 for leaf in leaves {

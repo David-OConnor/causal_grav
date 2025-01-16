@@ -9,13 +9,13 @@ use rayon::prelude::*;
 
 use crate::{
     accel::MondFn,
+    barnes_hut::{Cube, Tree},
     body_creation::{GalaxyDescrip, GalaxyModel},
     gaussian::{COEFF_C, MAX_SHELL_R},
     playback::{save, vec3_to_f32, GravShellSnapshot, SnapShot, DEFAULT_SNAPSHOT_FILE},
     render::render,
     units::{A0_MOND, C},
 };
-use crate::barnes_hut::{Cube, Tree};
 
 mod accel;
 mod body_creation;
@@ -325,9 +325,10 @@ fn build(state: &mut State, force_model: ForceModel) {
         // todo: C+P from integrate, so we can test acc vals.
         // let bodies_other = state.bodies.clone(); // todo: I don't like this. Avoids mut error.
 
-        if t % BB_GEN_RATIO == 0 {
-            bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
-        }
+        // todo: Put bakc.
+        // if t % BB_GEN_RATIO == 0 {
+        bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
+        // }
 
         // Calculate dt for this step, based on the closest/fastest rel velocity.
         // This affects motion integration only; not shell creation.
@@ -342,15 +343,24 @@ fn build(state: &mut State, force_model: ForceModel) {
         let mut tree = None;
         if force_model != ForceModel::GaussShells {
             tree = Some(Tree::new(&state.bodies, &bb));
+            println!("\nTree size: {:?}", tree.as_ref().unwrap().nodes.len()); // todo temp
+            for node in &tree.as_ref().unwrap().nodes {
+                println!("Node: {node}");
+            }
         }
 
+        println!("T Iterr");
         // This approach avoids a borrow problem that occurs if mutating bodies directly.
         let accs: Vec<Vec3> = state
             .bodies
-            .par_iter()
+            // .par_iter()
+            .iter()
             .enumerate()
             .map(|(id_target, body_target)| {
+                // for (id_target, body_target) in state.bodies.iter_mut().enumerate() {
+                println!("LOOP");
                 match force_model {
+                    // body_target.accel = match force_model {
                     // ForceModel::Newton => accel::acc_newton(
                     //     body_target.posit,
                     //     id,
@@ -358,18 +368,17 @@ fn build(state: &mut State, force_model: ForceModel) {
                     //     None,
                     //     state.config.softening_factor_sq,
                     // ),
-                    ForceModel::Newton =>
-                        barnes_hut::acc_newton_bh(
-                            body_target.posit,
-                            id_target,
-                            &tree.as_ref().unwrap(),
-                            // &bodies_other,
-                            // &state.bodies,
-                            // &bb,
-                            state.config.barnes_hut_θ,
-                            None,
-                            state.config.softening_factor_sq,
-                        ),
+                    ForceModel::Newton => barnes_hut::acc_newton_bh(
+                        body_target.posit,
+                        id_target,
+                        &tree.as_ref().unwrap(),
+                        // &bodies_other,
+                        // &state.bodies,
+                        // &bb,
+                        state.config.barnes_hut_θ,
+                        None,
+                        state.config.softening_factor_sq,
+                    ),
                     ForceModel::GaussShells => accel::calc_acc_shell(
                         &state.shells,
                         body_target.posit,
@@ -377,20 +386,21 @@ fn build(state: &mut State, force_model: ForceModel) {
                         state.config.gauss_c,
                         state.config.softening_factor_sq,
                     ),
-                    ForceModel::Mond(mond_fn) =>
-                        barnes_hut::acc_newton_bh(
-                            body_target.posit,
-                            id_target,
-                            &tree.as_ref().unwrap(),
-                            // &bodies_other,
-                            // &state.bodies,
-                            // &bb,
-                            state.config.barnes_hut_θ,
-                            Some(mond_fn),
-                            state.config.softening_factor_sq,
-                        ),
+                    ForceModel::Mond(mond_fn) => barnes_hut::acc_newton_bh(
+                        body_target.posit,
+                        id_target,
+                        &tree.as_ref().unwrap(),
+                        // &bodies_other,
+                        // &state.bodies,
+                        // &bb,
+                        state.config.barnes_hut_θ,
+                        Some(mond_fn),
+                        state.config.softening_factor_sq,
+                    ),
                 }
-            }).collect();
+            })
+            .collect();
+        // }
 
         if t % 1_000 == 0 {
             println!("N body time: {}us", start_time.elapsed().as_micros());

@@ -134,7 +134,7 @@ pub fn acc_newton(
             Some(acc)
         })
         .reduce(Vec3::new_zero, |acc, elem| acc + elem) // Sum the contributions.
-        // .fold(Vec3::new_zero(), |acc, elem| acc + elem) // Sum the contributions.
+                                                        // .fold(Vec3::new_zero(), |acc, elem| acc + elem) // Sum the contributions.
 }
 
 /// Finds the gravitomagnetic vector potential, analagous to magnetism in Maxwell's equations for EM.

@@ -7,6 +7,8 @@
 
 // todo: You can use rayon more throughout this, e.g. during tree construction.
 
+use std::{fmt, fmt::Formatter};
+
 use lin_alg::f64::Vec3;
 use rayon::prelude::*;
 
@@ -41,7 +43,7 @@ impl Cube {
     ///
     /// The z offset is intended for the case where the Z coordinate for all particles is 0.
     /// This prevents the divisions straddling the points, doubling the number of nodes.
-    pub fn from_bodies(bodies: &[Body], pad: f64,  z_offset: bool) -> Option<Self> {
+    pub fn from_bodies(bodies: &[Body], pad: f64, z_offset: bool) -> Option<Self> {
         if bodies.is_empty() {
             return None;
         }
@@ -112,13 +114,15 @@ impl Cube {
     }
 
     /// Divide this into equal-area octants.
-    pub(crate) fn divide_into_octants(&self) -> [Self; 8] {
+    // pub(crate) fn divide_into_octants(&self) -> [Self; 8] { // todo: TS stack overflow
+    pub(crate) fn divide_into_octants(&self) -> Vec<Self> {
         let width = self.width / 2.;
         let wd2 = self.width / 4.; // short for brevity below.
 
         // Every combination of + and - for the center offset.
         // The order matters, due to the binary index logic used when partitioning bodies into octants.
-        [
+        // [
+        vec![
             Self::new(self.center + Vec3::new(-wd2, -wd2, -wd2), width, wd2),
             Self::new(self.center + Vec3::new(wd2, -wd2, -wd2), width, wd2),
             Self::new(self.center + Vec3::new(-wd2, wd2, -wd2), width, wd2),
@@ -145,6 +149,16 @@ pub struct Node {
     center_of_mass: Vec3,
 }
 
+impl fmt::Display for Node {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Id: {}, Width: {:.3}, Ch: {:?}",
+            self.id, self.bounding_box.width, self.children
+        )
+    }
+}
+
 #[derive(Debug)]
 /// A recursive tree. Each node can be subdivided  Terminates with `NodeType::NodeTerminal`.
 pub struct Tree {
@@ -158,51 +172,77 @@ impl Tree {
     /// bodies.
     ///
     /// We partially transverse it as-required while calculating the force on a given target.
-    pub fn new(
-        bodies: &[Body],
-        bb: &Cube,
-    ) -> Self {
+    pub fn new(bodies: &[Body], bb: &Cube) -> Self {
         // Convert &[Body] to &[&Body], and remove the target body.
-        let body_refs: Vec<&Body> = bodies
-            .iter()
-            .collect();
+        let body_refs: Vec<&Body> = bodies.iter().collect();
 
         let mut nodes = Vec::new();
 
         let mut current_node_i: usize = 0;
-        populate_nodes(&mut nodes, &body_refs, bb, &mut current_node_i);
+        // populate_nodes(&mut nodes, &body_refs, bb, &mut current_node_i);
+
+        // Stack to simulate recursion: Each entry contains (bodies, bounding box, parent_id, child_index).
+        let mut stack = Vec::new();
+        stack.push((body_refs.to_vec(), bb.clone(), None));
+
+        while let Some((bodies_, bb, parent_id)) = stack.pop() {
+            let (center_of_mass, mass) = center_of_mass(&bodies_);
+
+            if bodies_.len() <= MAX_BODIES_PER_NODE {
+                // Create a leaf node.
+                let node_id = current_node_i;
+                nodes.push(Node {
+                    id: node_id,
+                    bounding_box: bb.clone(),
+                    mass,
+                    center_of_mass,
+                    children: Vec::new(),
+                });
+                current_node_i += 1;
+
+                if let Some(parent_id) = parent_id {
+                    // nodes[parent_id].children.push(node_id);
+                    // todo: Odd: Rust is requesting an explicit type...
+                    let a: &mut Node = &mut nodes[parent_id];
+                    a.children.push(node_id);
+                }
+            } else {
+                // Create an internal node and push its ID.
+                let node_id = current_node_i;
+                current_node_i += 1;
+
+                nodes.push(Node {
+                    id: node_id,
+                    bounding_box: bb.clone(),
+                    mass,
+                    center_of_mass,
+                    children: Vec::new(),
+                });
+
+                if let Some(parent_id) = parent_id {
+                    // nodes[parent_id].children.push(node_id);
+                    // todo: Odd: Rust is requesting an explicit type...
+                    let a: &mut Node = &mut nodes[parent_id];
+                    a.children.push(node_id);
+                }
+
+                // Divide into octants and partition bodies.
+                let octants = bb.divide_into_octants();
+                let bodies_by_octant = partition(&bodies_, &bb);
+
+                // Add each octant with bodies to the stack.
+                for (i, octant) in octants.into_iter().enumerate() {
+                    if !bodies_by_octant[i].is_empty() {
+                        stack.push((bodies_by_octant[i].clone(), octant, Some(node_id)));
+                    }
+                }
+            }
+        }
 
         // Now that nodes are populated, rearrange so index == `id`. We will then index by `children`.
         nodes.sort_by(|l, r| l.id.partial_cmp(&r.id).unwrap());
 
         Self { nodes }
-    }
-
-
-    /// Recursive function called for getting leaves relevant to a given target.
-    fn leaves_inner<'a>(&'a self, leaves: &mut Vec<&'a Node>, node_i: usize, posit_target: Vec3, id_target: usize, θ: f64) {
-        let mut node = &self.nodes[node_i];
-
-        let dist = (posit_target - node.center_of_mass).magnitude();
-
-        // todo: Is this where you should prevent self-interaction? Likely.
-
-        if dist < 1e-8 {
-            // todo: Better way, using id_target?
-            // println!("Attempting to avoid self-interaction");
-            return;
-        }
-
-        // The source is far, or we have few items (e.g. 1) items in this region; this node is
-        // terminal. (A leaf).
-        if node.children.len() <= MAX_BODIES_PER_NODE || node.bounding_box.width / dist < θ {
-            leaves.push(node);
-        } else {
-            // The source is near; go deeper.
-            for child_i in &node.children {
-                self.leaves_inner(leaves, *child_i, posit_target, id_target, θ);
-            }
-        }
     }
 
     /// Get all leaves relevant to a given target. We use this to create a coarser
@@ -215,7 +255,36 @@ impl Tree {
             return result;
         }
 
-        self.leaves_inner(&mut result, 0, posit_target, id_target, θ);
+        let node_i = 0;
+
+        let mut stack = Vec::new();
+        stack.push(node_i);
+
+        while let Some(current_node_i) = stack.pop() {
+            let node = &self.nodes[current_node_i];
+
+            if node.children.len() <= MAX_BODIES_PER_NODE {
+                result.push(node);
+                continue;
+            }
+
+            let dist = (posit_target - node.center_of_mass).magnitude();
+
+            // Avoid self-interaction based on distance or id_target.
+            // todo: Use id_target, if able.
+            if dist < 1e-8 {
+                continue;
+            }
+
+            if node.bounding_box.width / dist < θ {
+                result.push(node);
+            } else {
+                // The source is near; add children to the stack to go deeper.
+                for &child_i in &node.children {
+                    stack.push(child_i);
+                }
+            }
+        }
 
         result
     }
@@ -239,69 +308,11 @@ fn center_of_mass(bodies: &[&Body]) -> (Vec3, f64) {
     (center_of_mass, mass)
 }
 
-
-/// Recursively populate nodes of the tree. This contains the bulk of the Barnes Hut algorithm.
-/// This is effectively the `Tree` constructor, but is separate from it so we can recur.
-fn populate_nodes(nodes: &mut Vec<Node>, bodies: &[&Body], bb: &Cube, current_node_i: &mut usize) {
-    // todo: Is this at the core? At least the initial one can be cached.
-    //todo: I suspect the fix is a more fundamental change than that.
-    let (center_of_mass, mass) = center_of_mass(bodies);
-
-    if bodies.len() <= MAX_BODIES_PER_NODE {
-        nodes.push(Node {
-            id: *current_node_i,
-            bounding_box: bb.clone(), // todo: Way around this?
-            mass,
-            center_of_mass,
-            children: Vec::new(),
-        });
-            *current_node_i += 1;
-    } else {
-        // If the node is not a leaf, divide into octants and recursively populate.
-        let octants = bb.divide_into_octants();
-        let bodies_by_octant = partition(bodies, bb);
-
-        let node_id = *current_node_i; // Reserve the current node ID.
-        *current_node_i += 1; // Increment for subsequent nodes.
-
-        let mut children = Vec::new();
-
-        for (i, octant) in octants.into_iter().enumerate() {
-            if !bodies_by_octant[i].is_empty() {
-                // Populate the child nodes recursively.
-                let child_node_id = *current_node_i; // Record the ID before recursion.
-                populate_nodes(
-                    nodes,
-                    bodies_by_octant[i].as_slice(),
-                    &octant,
-                    current_node_i,
-                );
-                children.push(child_node_id); // Push the correct ID after recursion.
-            }
-        }
-
-        nodes.push(Node {
-            id: node_id,
-            bounding_box: bb.clone(), // todo: Way around this?
-            mass,
-            center_of_mass,
-            children,
-        });
-
-        // octants
-        //     .into_par_iter()
-        //     .zip(bodies_by_octant.into_par_iter())
-        //     .filter(|(_, bodies)| !bodies.is_empty())
-        //     .for_each(|(octant, bodies)| {
-        //         populate_nodes(nodes, bodies.as_slice(), &octant, posit_target, θ);
-        //     });
-        // }
-    }
-}
-
 /// Partition bodies into each of the 8 octants.
-fn partition<'a>(bodies: &[&'a Body], bb: &Cube) -> [Vec<&'a Body>; 8] {
-    let mut result: [Vec<&Body>; 8] = Default::default();
+// fn partition<'a>(bodies: &[&'a Body], bb: &Cube) -> [Vec<&'a Body>; 8] { // todo TS stack overflow
+fn partition<'a>(bodies: &[&'a Body], bb: &Cube) -> Vec<Vec<&'a Body>> {
+    // let mut result: [Vec<&Body>; 8] = Default::default();
+    let mut result: Vec<Vec<&Body>> = vec![Vec::new(); 8];
 
     for body in bodies {
         let mut index = 0;
@@ -332,12 +343,11 @@ pub fn acc_newton_bh(
 ) -> Vec3 {
     // todo: Put back the part checking for self interaction.
     tree.leaves(posit_target, id_target, θ)
-        // tree.nodes
         // .par_chunks(32) // Process in chunks
         // .map(|chunk| {
         //     chunk.iter().map(|leaf| {
-        .par_iter()
-        // .iter()
+        // .par_iter()
+        .iter()
         .map(|leaf| {
             let acc_diff = leaf.center_of_mass - posit_target;
             let dist = acc_diff.magnitude();
@@ -352,6 +362,6 @@ pub fn acc_newton_bh(
 
             acc
         })
-        .reduce(Vec3::new_zero, |acc, elem| acc + elem)
-    // .fold(Vec3::new_zero(), |acc, elem| acc + elem)
+        // .reduce(Vec3::new_zero, |acc, elem| acc + elem)
+        .fold(Vec3::new_zero(), |acc, elem| acc + elem)
 }

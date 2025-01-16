@@ -9,11 +9,7 @@ use graphics::{
 };
 use lin_alg::f32::{Quaternion, Vec3};
 
-use crate::{
-    playback::{change_snapshot},
-    ui::ui_handler,
-    State,
-};
+use crate::{playback::change_snapshot, ui::ui_handler, State};
 
 type Color = (f32, f32, f32);
 
@@ -25,7 +21,7 @@ const BACKGROUND_COLOR: Color = (0., 0., 0.);
 const RENDER_DIST: f32 = 200.;
 
 pub const BODY_SIZE_SCALER: f32 = 1.0e-9; // We multiply mass by this.
-pub const BODY_SIZE_MIN: f32 = 0.05;
+pub const BODY_SIZE_MIN: f32 = 0.03;
 pub const BODY_SIZE_MAX: f32 = 0.6;
 
 pub const BODY_SHINYNESS: f32 = 2.;
