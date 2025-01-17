@@ -18,20 +18,41 @@ use crate::{
     Body,
 };
 
-const MAX_BODIES_PER_NODE: usize = 1;
+#[derive(Debug)]
+pub struct BhConfig {
+    /// This determines how aggressively we group. It's no lower than 0, and usually
+    /// no higher than 1 (?). 0 means no grouping. (Best accuracy; poorest performance). Higher values
+    /// decrease accuracy, and are more performant.
+    pub θ: f64,
+    pub max_bodies_per_node: usize,
+    /// This is a limit on division, preventing getting stuck in a loop, e.g. for particles with close.
+    /// (or identical) positions
+    pub max_tree_depth: usize,
+}
+
+impl Default for BhConfig {
+    fn default() -> Self {
+        Self {
+            θ: 0.5,
+            max_bodies_per_node: 1,
+            max_tree_depth: 15,
+        }
+    }
+}
+
+/// We use this to allow for arbitrary body (or particle etc) types in application code to
+/// use this library.
+// If we split this module into a library.
+pub trait _Body {
+    fn posit() -> Vec3;
+    fn mass() -> f64;
+}
 
 #[derive(Clone, Debug)]
 /// A cubical bounding box. length=width=depth.
 pub struct Cube {
     pub center: Vec3,
     pub width: f64,
-    // These mins and maxes are derivative of center/width.
-    pub x_min: f64,
-    pub x_max: f64,
-    pub y_min: f64,
-    pub y_max: f64,
-    pub z_min: f64,
-    pub z_max: f64,
 }
 
 impl Cube {
@@ -82,7 +103,6 @@ impl Cube {
 
         // Coerce to a cube.
         let mut width = x_size.max(y_size).max(z_size);
-        let width_div2 = width / 2.;
 
         let center = Vec3::new(
             (x_max + x_min) / 2.,
@@ -90,26 +110,14 @@ impl Cube {
             (z_max + z_min) / 2.,
         );
 
-        Some(Self::new(center, width, width_div2))
+        Some(Self::new(center, width))
     }
 
-    pub fn new(center: Vec3, width: f64, width_div2: f64) -> Self {
-        let x_min = center.x - width_div2;
-        let x_max = center.x + width_div2;
-        let y_min = center.y - width_div2;
-        let y_max = center.y + width_div2;
-        let z_min = center.z - width_div2;
-        let z_max = center.z + width_div2;
+    pub fn new(center: Vec3, width: f64) -> Self {
 
         Self {
             center,
             width,
-            x_min,
-            x_max,
-            y_min,
-            y_max,
-            z_min,
-            z_max,
         }
     }
 
@@ -123,14 +131,14 @@ impl Cube {
         // The order matters, due to the binary index logic used when partitioning bodies into octants.
         // [
         vec![
-            Self::new(self.center + Vec3::new(-wd2, -wd2, -wd2), width, wd2),
-            Self::new(self.center + Vec3::new(wd2, -wd2, -wd2), width, wd2),
-            Self::new(self.center + Vec3::new(-wd2, wd2, -wd2), width, wd2),
-            Self::new(self.center + Vec3::new(wd2, wd2, -wd2), width, wd2),
-            Self::new(self.center + Vec3::new(-wd2, -wd2, wd2), width, wd2),
-            Self::new(self.center + Vec3::new(wd2, -wd2, wd2), width, wd2),
-            Self::new(self.center + Vec3::new(-wd2, wd2, wd2), width, wd2),
-            Self::new(self.center + Vec3::new(wd2, wd2, wd2), width, wd2),
+            Self::new(self.center + Vec3::new(-wd2, -wd2, -wd2), width),
+            Self::new(self.center + Vec3::new(wd2, -wd2, -wd2), width),
+            Self::new(self.center + Vec3::new(-wd2, wd2, -wd2), width),
+            Self::new(self.center + Vec3::new(wd2, wd2, -wd2), width),
+            Self::new(self.center + Vec3::new(-wd2, -wd2, wd2), width),
+            Self::new(self.center + Vec3::new(wd2, -wd2, wd2), width),
+            Self::new(self.center + Vec3::new(-wd2, wd2, wd2), width),
+            Self::new(self.center + Vec3::new(wd2, wd2, wd2), width),
         ]
     }
 }
@@ -172,7 +180,7 @@ impl Tree {
     /// bodies.
     ///
     /// We partially transverse it as-required while calculating the force on a given target.
-    pub fn new(bodies: &[Body], bb: &Cube) -> Self {
+    pub fn new(bodies: &[Body], bb: &Cube, config: &BhConfig) -> Self {
         // Convert &[Body] to &[&Body].
         let body_refs: Vec<&Body> = bodies.iter().collect();
 
@@ -181,14 +189,18 @@ impl Tree {
         let mut current_node_i: usize = 0;
         // populate_nodes(&mut nodes, &body_refs, bb, &mut current_node_i);
 
-        // Stack to simulate recursion: Each entry contains (bodies, bounding box, parent_id, child_index).
+        // Stack to simulate recursion: Each entry contains (bodies, bounding box, parent_id, child_index, depth).
         let mut stack = Vec::new();
-        stack.push((body_refs.to_vec(), bb.clone(), None));
+        stack.push((body_refs.to_vec(), bb.clone(), None, 0));
 
-        while let Some((bodies_, bb, parent_id)) = stack.pop() {
+        while let Some((bodies_, bb, parent_id, depth)) = stack.pop() {
+            if depth > config.max_tree_depth {
+                eprintln!("Tree generation: Max recusion depth exceeded.");
+                break;
+            }
             let (center_of_mass, mass) = center_of_mass(&bodies_);
 
-            if bodies_.len() <= MAX_BODIES_PER_NODE {
+            if bodies_.len() <= config.max_bodies_per_node {
                 // Create a leaf node.
                 let node_id = current_node_i;
                 nodes.push(Node {
@@ -233,7 +245,12 @@ impl Tree {
                 // Add each octant with bodies to the stack.
                 for (i, octant) in octants.into_iter().enumerate() {
                     if !bodies_by_octant[i].is_empty() {
-                        stack.push((bodies_by_octant[i].clone(), octant, Some(node_id)));
+                        stack.push((
+                            bodies_by_octant[i].clone(),
+                            octant,
+                            Some(node_id),
+                            depth + 1,
+                        ));
                     }
                 }
             }
@@ -248,7 +265,12 @@ impl Tree {
     /// Get all leaves relevant to a given target. We use this to create a coarser
     /// version of the tree, containing only the nodes we need to calculate acceleration
     /// on a specific target.
-    pub(crate) fn leaves(&self, posit_target: Vec3, id_target: usize, θ: f64) -> Vec<&Node> {
+    pub(crate) fn leaves(
+        &self,
+        posit_target: Vec3,
+        id_target: usize,
+        config: &BhConfig,
+    ) -> Vec<&Node> {
         let mut result = Vec::new();
 
         if self.nodes.is_empty() {
@@ -263,7 +285,7 @@ impl Tree {
         while let Some(current_node_i) = stack.pop() {
             let node = &self.nodes[current_node_i];
 
-            if node.children.len() <= MAX_BODIES_PER_NODE {
+            if node.children.len() <= config.max_bodies_per_node {
                 result.push(node);
                 continue;
             }
@@ -276,7 +298,7 @@ impl Tree {
                 continue;
             }
 
-            if node.bounding_box.width / dist < θ {
+            if node.bounding_box.width / dist < config.θ {
                 result.push(node);
             } else {
                 // The source is near; add children to the stack to go deeper.
@@ -337,12 +359,12 @@ pub fn acc_newton_bh(
     posit_target: Vec3,
     id_target: usize,
     tree: &Tree,
-    θ: f64,
+    config: &BhConfig,
     mond: Option<MondFn>,
     softening_factor_sq: f64,
 ) -> Vec3 {
     // todo: Put back the part checking for self interaction.
-    tree.leaves(posit_target, id_target, θ)
+    tree.leaves(posit_target, id_target, config)
         .par_iter()
         .filter_map(|leaf| {
             let acc_diff = leaf.center_of_mass - posit_target;
@@ -360,7 +382,7 @@ pub fn acc_newton_bh(
 
             if let Some(mond_fn) = mond {
                 let x = acc.magnitude() / A0_MOND;
-                acc = acc / mond_fn.μ(x);
+                acc /= mond_fn.μ(x);
             }
 
             Some(acc)

@@ -9,7 +9,7 @@ use rayon::prelude::*;
 
 use crate::{
     accel::MondFn,
-    barnes_hut::{Cube, Tree},
+    barnes_hut::{BhConfig, Cube, Tree},
     body_creation::{GalaxyDescrip, GalaxyModel},
     gaussian::{COEFF_C, MAX_SHELL_R},
     playback::{save, vec3_to_f32, GravShellSnapshot, SnapShot, DEFAULT_SNAPSHOT_FILE},
@@ -21,7 +21,7 @@ mod accel;
 mod body_creation;
 mod cdm;
 mod fluid_dynamics;
-mod fmm_gpt;
+// mod fmm_gpt;
 mod galaxy_data;
 mod gaussian;
 mod gem;
@@ -84,8 +84,7 @@ pub struct Config {
     num_rings_bulge: usize, // todo: You may, in the future, not make this a constant.
     softening_factor_sq: f64,
     snapshot_ratio: usize,
-    /// Smaller values use less grouping; these are slower, but more accurate.
-    barnes_hut_θ: f64,
+    bh_config: BhConfig,
 }
 
 impl Default for Config {
@@ -120,23 +119,22 @@ impl Default for Config {
             num_rings_bulge,
             softening_factor_sq: 0.01,
             snapshot_ratio: 4,
-            barnes_hut_θ: 0.4,
+            bh_config: BhConfig {
+                θ: 0.4,
+                ..Default::default()
+            },
         }
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Default)]
 pub enum ForceModel {
+    #[default]
     Newton,
     Mond(MondFn),
     GaussShells,
 }
 
-impl Default for ForceModel {
-    fn default() -> Self {
-        ForceModel::Newton
-    }
-}
 
 pub struct StateUi {
     snapshot_selected: usize,
@@ -210,7 +208,7 @@ impl State {
             shells: self
                 .shells
                 .iter()
-                .map(|s| GravShellSnapshot::new(s))
+                .map(GravShellSnapshot::new)
                 .collect(),
             dt: dt as f32,
         })
@@ -354,9 +352,13 @@ fn build(state: &mut State, force_model: ForceModel) {
             start_time_tree = Instant::now();
         }
 
+        // for body in &state.bodies {
+        //     println!("Body: {:.1?}", body);
+        // }
+
         let mut tree = None;
         if force_model != ForceModel::GaussShells {
-            tree = Some(Tree::new(&state.bodies, &bb));
+            tree = Some(Tree::new(&state.bodies, &bb, &state.config.bh_config));
         }
 
         if t % BENCH_RATIO == 0 {
@@ -389,8 +391,8 @@ fn build(state: &mut State, force_model: ForceModel) {
                 &state.shells,
                 dt,
                 state.config.gauss_c,
-                &tree.as_ref().unwrap(),
-                state.config.barnes_hut_θ,
+                tree.as_ref().unwrap(),
+                &state.config.bh_config,
                 force_model,
                 state.config.softening_factor_sq,
             );
@@ -426,7 +428,7 @@ fn main() {
     state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
 
     state.ui.dt_input = state.config.dt.to_string();
-    state.ui.θ_input = state.config.barnes_hut_θ.to_string();
+    state.ui.θ_input = state.config.bh_config.θ.to_string();
 
     // todo: Don't auto-build, but we a graphics engine have a prob when we don't.
     state.take_snapshot(0., 0.); // Initial snapshot; t=0.

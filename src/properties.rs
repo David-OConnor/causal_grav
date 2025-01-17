@@ -19,7 +19,7 @@ fn get_nearby_pts(bodies: &[Body], center: Vec3, r: f64, dr: f64) -> Vec<&Body> 
     // Todo: Consider a fuzzy, weighted dropoff instead of these hard boundaries. Or not;
     // todo: Maybe this is fine.
     bodies
-        .into_iter()
+        .iter()
         .filter(|b| ((b.posit - center).magnitude() - r).abs() <= dr / 2.)
         // .map(|b2| b2.posit)
         .collect()
@@ -56,7 +56,7 @@ pub fn mass_density(bodies: &[Body], center: Vec3) -> Vec<(f64, f64)> {
     for i in 0..N_SAMPLE_PTS {
         let r = i as f64 * dr;
 
-        let nearby_masses: Vec<f64> = get_nearby_pts(&bodies, center, r, dr)
+        let nearby_masses: Vec<f64> = get_nearby_pts(bodies, center, r, dr)
             .into_iter()
             .map(|b2| b2.mass)
             .collect();
@@ -179,16 +179,16 @@ pub fn plot(data: &[(f64, f64)], x_label: &str, y_label: &str, plot_title: &str,
 
     // Plot the data points
     chart
-        .draw_series(LineSeries::new(data.iter().cloned(), &BLUE)) // Use `.cloned()` here
+        .draw_series(LineSeries::new(data.iter().cloned(), BLUE)) // Use `.cloned()` here
         .unwrap()
         .label("Data")
-        .legend(|(x, y)| PathElement::new([(x, y), (x + 20, y)], &BLUE));
+        .legend(|(x, y)| PathElement::new([(x, y), (x + 20, y)], BLUE));
 
     // Draw the legend
     chart
         .configure_series_labels()
-        .background_style(&WHITE.mix(0.8))
-        .border_style(&BLACK)
+        .background_style(WHITE.mix(0.8))
+        .border_style(BLACK)
         .draw()
         .unwrap();
 }

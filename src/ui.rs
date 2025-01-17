@@ -31,32 +31,6 @@ fn int_field(val: &mut usize, label: &str, redraw_bodies: &mut bool, ui: &mut Ui
     }
 }
 
-fn force_debug(snapshot: &SnapShot, ui: &mut Ui) {
-    ui.horizontal(|ui| {
-        // for (i, body_V) in state.snapshots[state.ui.snapshot_selected]
-        //     .V_at_bodies
-        //     .iter()
-        //     .enumerate()
-        // {
-        //     ui.label(&format!("V at Body {i}:"));
-        //     ui.label(&format!("{:?}", body_V));
-        // }
-
-        ui.add_space(COL_SPACING);
-
-        for (i, body_V) in snapshot.body_accs.iter().enumerate() {
-            ui.label(format!("Acc at Body {i}:"));
-            ui.label(format!("{:?}", body_V));
-        }
-    });
-
-    ui.horizontal(|ui| {
-        for (i, body_p) in snapshot.body_posits.iter().enumerate() {
-            ui.label(format!("Posit Body {i}:"));
-            ui.label(format!("{:?}", body_p));
-        }
-    });
-}
 
 /// This function draws the (immediate-mode) GUI.
 /// [UI items](https://docs.rs/egui/latest/egui/struct.Ui.html)
@@ -202,7 +176,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             );
             if ui.button("Save θ").clicked() {
                 if let Ok(v) = state.ui.θ_input.parse() {
-                    state.config.barnes_hut_θ = v;
+                    state.config.bh_config.θ = v;
                 }
             }
 
@@ -235,7 +209,11 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 // todo: Of current snapshot.
                 let bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
 
-                let tree = Tree::new(&state.bodies, &bb);
+                for body in &state.bodies {
+                    println!("Body: {:.4?}", body);
+                }
+
+                let tree = Tree::new(&state.bodies, &bb, &state.config.bh_config);
 
                 // todo: Subdivide the tree based on a target body here A/R.
 
@@ -253,7 +231,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 let leaves = tree.leaves(
                     lin_alg::f64::Vec3::new(2., 2., 0.),
                     99999,
-                    state.config.barnes_hut_θ,
+                    &state.config.bh_config,
                 );
                 println!("Leaf count: {:?}", leaves.len());
 

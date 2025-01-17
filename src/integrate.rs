@@ -1,6 +1,10 @@
 use rayon::prelude::*;
 
-use crate::{accel, barnes_hut, barnes_hut::Tree, Body, ForceModel, GravShell};
+use crate::{
+    accel, barnes_hut,
+    barnes_hut::{BhConfig, Tree},
+    Body, ForceModel, GravShell,
+};
 
 pub fn integrate_rk4(
     bodies: &mut [Body],
@@ -8,7 +12,7 @@ pub fn integrate_rk4(
     dt: f64,
     gauss_c: f64,
     tree: &Tree,
-    θ: f64,
+    bh_config: &BhConfig,
     force_model: ForceModel,
     softening_factor_sq: f64,
 ) {
@@ -16,7 +20,14 @@ pub fn integrate_rk4(
     let acc = |id_target, posit_target| match force_model {
         ForceModel::Newton => {
             // accel::acc_newton(posit, id, &bodies_other, None, softening_factor_sq)
-            barnes_hut::acc_newton_bh(posit_target, id_target, tree, θ, None, softening_factor_sq)
+            barnes_hut::acc_newton_bh(
+                posit_target,
+                id_target,
+                tree,
+                bh_config,
+                None,
+                softening_factor_sq,
+            )
         }
         ForceModel::GaussShells => accel::calc_acc_shell(
             shells,
@@ -27,7 +38,14 @@ pub fn integrate_rk4(
         ),
         ForceModel::Mond(mond_fn) => {
             // accel::acc_newton(posit_target, id_target, &bodies_other, Some(mond_fn), softening_factor_sq)
-            barnes_hut::acc_newton_bh(posit_target, id_target, tree, θ, None, softening_factor_sq)
+            barnes_hut::acc_newton_bh(
+                posit_target,
+                id_target,
+                tree,
+                bh_config,
+                None,
+                softening_factor_sq,
+            )
         }
     };
 

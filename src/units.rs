@@ -1,5 +1,7 @@
 //! Contains unit conversions, and a definition of the base units used throughout this program.
 
+#![allow(unused)]
+
 use std::f64::consts::TAU;
 
 // We use this to convert angle to length, when multiplied by distance.

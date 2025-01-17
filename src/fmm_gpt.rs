@@ -208,7 +208,7 @@ fn compute_acceleration(node: &OctreeNode, target: &Body, mut acc: Vec3) -> Vec3
                     let dist = dist_sq.sqrt();
                     let inv_dist3 = 1.0 / (dist_sq * dist);
                     let f = G * b.mass * inv_dist3;
-                    acc = acc + r_vec * f;
+                    acc += r_vec * f;
                 }
             }
         }
