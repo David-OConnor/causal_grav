@@ -1,7 +1,6 @@
 /target
 
 # Snapshots and save files.
-*.cg
 *.grav
 # Plots
 *.png

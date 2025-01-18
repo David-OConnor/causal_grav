@@ -8,16 +8,17 @@ use std::{
     time::Instant,
 };
 
+use barnes_hut::{BhConfig, BodyModel, Cube, Tree};
 use bincode::{Decode, Encode};
 use lin_alg::f64::Vec3;
 use rand::Rng;
 use rayon::prelude::*;
 
 use crate::{
-    accel::MondFn,
-    barnes_hut::{BhConfig, Cube, Tree},
+    accel::{acc_newton_inner_with_mond, MondFn},
     body_creation::{GalaxyDescrip, GalaxyModel},
     gaussian::{COEFF_C, MAX_SHELL_R},
+    integrate::integrate_rk4,
     playback::{vec3_to_f32, GravShellSnapshot, SnapShot},
     render::render,
     units::{A0_MOND, C},
@@ -40,7 +41,6 @@ mod units;
 mod util;
 // mod fmm_gadget4;
 // mod fmm_py;
-mod barnes_hut;
 
 // Shower thought, from looking at this from a first person view: View things from the body's perspective.
 // Can you make of it something like that?
@@ -220,7 +220,7 @@ impl State {
         properties::plot_rotation_curve(&rotation_curve, &self.ui.galaxy_model.to_str());
         properties::plot_mass_density(&mass_density, &self.ui.galaxy_model.to_str());
     }
-    
+
     fn remove_far_shells(&mut self) {
         self.shells.retain(|shell| shell.radius <= MAX_SHELL_R);
     }
@@ -270,6 +270,16 @@ impl Body {
             radius: 0.,
             src_mass: self.mass,
         }
+    }
+}
+
+impl BodyModel for Body {
+    fn posit(&self) -> Vec3 {
+        self.posit
+    }
+
+    fn mass(&self) -> f64 {
+        self.mass
     }
 }
 
@@ -352,6 +362,10 @@ fn build(state: &mut State, force_model: ForceModel) {
     // let mut nodes = Vec::with_capacity(69);
 
     for t in 0..state.config.num_timesteps {
+        if force_model == ForceModel::GaussShells && t % state.config.shell_creation_ratio == 0 {
+            state.remove_far_shells(); // Note grouped above due to a borrow problem.
+        }
+
         if force_model == ForceModel::GaussShells {
             if t % state.config.shell_creation_ratio == 0 {
                 for (id, body) in state.bodies.iter().enumerate() {
@@ -363,9 +377,7 @@ fn build(state: &mut State, force_model: ForceModel) {
             }
         }
 
-        if force_model == ForceModel::GaussShells && t % state.config.shell_creation_ratio == 0 {
-            state.remove_far_shells(); // Note grouped above due to a borrow problem.
-        }
+        let cfg = &state.config; // Code cleaner.
 
         if t % BB_GEN_RATIO == 0 {
             bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
@@ -380,7 +392,7 @@ fn build(state: &mut State, force_model: ForceModel) {
         // This affects motion integration only; not shell creation.
         // let dt = util::calc_dt_dynamic(state, &bodies_other);
         // todo: Static DT for now, or shells won't work.
-        let dt = state.config.dt;
+        let dt = cfg.dt;
 
         if t % BENCH_RATIO == 0 {
             start_time_tree = Instant::now();
@@ -388,7 +400,7 @@ fn build(state: &mut State, force_model: ForceModel) {
 
         let mut tree = None;
         if force_model != ForceModel::GaussShells {
-            tree = Some(Tree::new(&state.bodies, &bb, &state.config.bh_config));
+            tree = Some(Tree::new(&state.bodies, &bb, &cfg.bh_config));
         }
 
         if t % BENCH_RATIO == 0 {
@@ -410,17 +422,66 @@ fn build(state: &mut State, force_model: ForceModel) {
             start_time_integ = Instant::now();
         }
         if force_model != ForceModel::GaussShells || state.time_elapsed > integrate_start_t {
-            // Update body motion.
-            integrate::integrate_rk4(
-                &mut state.bodies,
-                &state.shells,
-                dt,
-                state.config.gauss_c,
-                tree.as_ref().unwrap(),
-                &state.config.bh_config,
-                force_model,
-                state.config.softening_factor_sq,
-            );
+            // todo: You must update this acc using your tree approach.
+            let acc = |id_target, posit_target| match force_model {
+                ForceModel::Newton => {
+                    // accel::acc_newton(posit, id, &bodies_other, None, softening_factor_sq)
+                    let acc_fn = |acc_dir, mass, dist| {
+                        acc_newton_inner_with_mond(
+                            acc_dir,
+                            mass,
+                            dist,
+                            None,
+                            cfg.softening_factor_sq,
+                        )
+                    };
+
+                    barnes_hut::acc_bh(
+                        posit_target,
+                        id_target,
+                        tree.as_ref().unwrap(),
+                        &cfg.bh_config,
+                        &acc_fn,
+                    )
+                }
+                ForceModel::GaussShells => accel::calc_acc_shell(
+                    &state.shells,
+                    posit_target,
+                    id_target,
+                    cfg.gauss_c,
+                    cfg.softening_factor_sq,
+                ),
+                ForceModel::Mond(mond_fn) => {
+                    // accel::acc_newton(posit_target, id_target, &bodies_other, Some(mond_fn), softening_factor_sq)
+                    let acc_fn = |acc_dir, mass, dist| {
+                        acc_newton_inner_with_mond(
+                            acc_dir,
+                            mass,
+                            dist,
+                            Some(mond_fn),
+                            cfg.softening_factor_sq,
+                        )
+                    };
+
+                    barnes_hut::acc_bh(
+                        posit_target,
+                        id_target,
+                        tree.as_ref().unwrap(),
+                        &cfg.bh_config,
+                        &acc_fn,
+                    )
+                }
+            };
+
+            // Iterate, in parallel, over target bodies. The loop over source bodies, per target, is handled
+            // by the acceleration function.
+            state
+                .bodies
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(id_target, body_target)| {
+                    integrate_rk4(body_target, id_target, &acc, dt);
+                });
         }
 
         if t % BENCH_RATIO == 0 {
@@ -428,7 +489,7 @@ fn build(state: &mut State, force_model: ForceModel) {
         }
 
         // Save the current state to a snapshot, for later playback.
-        if t % state.config.snapshot_ratio == 0 {
+        if t % cfg.snapshot_ratio == 0 {
             state.take_snapshot(state.time_elapsed, dt);
         }
     }
@@ -447,7 +508,6 @@ fn main() {
     state.ui.θ_input = state.config.bh_config.θ.to_string();
 
     state.refresh_bodies();
-
 
     // if let Err(e) = util::save(&PathBuf::from(DEFAULT_SNAPSHOT_FILE), &state.snapshots) {
     //     eprintln!("Error saving snapshots: {e}");

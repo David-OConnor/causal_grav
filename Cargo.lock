@@ -192,6 +192,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "barnes_hut"
+version = "1.0.5"
+dependencies = [
+ "bincode",
+ "lin_alg",
+ "rayon",
+]
+
+[[package]]
 name = "bincode"
 version = "2.0.0-rc.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -344,6 +353,7 @@ dependencies = [
 name = "causal_grav"
 version = "0.1.0"
 dependencies = [
+ "barnes_hut",
  "bincode",
  "egui",
  "graphics",
@@ -1429,7 +1439,7 @@ dependencies = [
 
 [[package]]
 name = "lin_alg"
-version = "1.0.2"
+version = "1.0.3"
 
 [[package]]
 name = "linux-raw-sys"

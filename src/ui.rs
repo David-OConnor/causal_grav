@@ -1,10 +1,17 @@
 use std::{path::PathBuf, str::FromStr};
 
+use barnes_hut::{Cube, Tree};
 use egui::{Color32, Context, RichText, Slider, TopBottomPanel, Ui};
 use graphics::{EngineUpdates, Entity, Scene};
 use lin_alg::f32::{Quaternion, Vec3};
 
-use crate::{accel::MondFn, barnes_hut::{Cube, Tree}, body_creation::GalaxyModel, build, playback::{change_snapshot, SnapShot}, util, ForceModel, State, BOUNDING_BOX_PAD, SAVE_FILE, properties};
+use crate::{
+    accel::MondFn,
+    body_creation::GalaxyModel,
+    build,
+    playback::{change_snapshot, SnapShot},
+    properties, util, ForceModel, State, BOUNDING_BOX_PAD, SAVE_FILE,
+};
 
 pub const ROW_SPACING: f32 = 10.;
 pub const COL_SPACING: f32 = 30.;
@@ -207,7 +214,11 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                     99999,
                     &state.config.bh_config,
                 );
-                println!("Leaf count: {}. Full tree len: {}", leaves.len(), tree.nodes.len());
+                println!(
+                    "Leaf count: {}. Full tree len: {}",
+                    leaves.len(),
+                    tree.nodes.len()
+                );
 
                 for leaf in leaves {
                     let c = leaf.bounding_box.center;

@@ -11,32 +11,44 @@ use crate::{
     Body, GravShell,
 };
 
-// /// Calculate the force acting on a body, given the local environment of gravity shells intersecting it.
-// pub fn acc_shells(
-//     body: &Body,
-//     rays: &[GravRay],
-//     shells: &[GravShell],
-//     emitter_id: usize,
-//     dt: f64,
-//     shell_c: f64,
-// ) -> Vec3 {
-//     let rect = SampleRect::new(body.posit, RAY_SAMPLE_WIDTH);
-//     let properties = rect.measure_properties(rays, shells, emitter_id, dt, shell_c);
-//
-//     // todo: Is this too indirect?
-//
-//     properties.acc_shell
-// }
+#[derive(Clone, Copy, PartialEq)]
+pub enum MondFn {
+    /// Famaey & Binney. More realistic fits than the standard one. `x` is a_Newton / a_0.
+    Simple,
+    /// Sanders & Noordermeer. `x` is a_Newton / a_0.
+    Standard,
+}
 
-/// A helper function, where the inputs are precomputed.
+impl MondFn {
+    pub fn μ(&self, x: f64) -> f64 {
+        match self {
+            Self::Simple => x / (1. + x),
+            Self::Standard => x / (1. + x.powi(2)).sqrt(),
+        }
+    }
+}
+
+/// The most fundamental part of Newtonian acceleration calculation.
 /// `acc_dir` is a unit vector.
-pub(crate) fn acc_newton_inner(
+pub fn acc_newton_inner(acc_dir: Vec3, src_mass: f64, dist: f64, softening_factor_sq: f64) -> Vec3 {
+    acc_dir * G * src_mass / (dist.powi(2) + softening_factor_sq)
+}
+
+/// This optionally applies MOND to our basic Newton acceleration.
+pub fn acc_newton_inner_with_mond(
     acc_dir: Vec3,
-    src_mass: f64,
+    mass: f64,
     dist: f64,
+    mond: Option<MondFn>,
     softening_factor_sq: f64,
 ) -> Vec3 {
-    acc_dir * G * src_mass / (dist.powi(2) + softening_factor_sq)
+    let mut acc = acc_newton_inner(acc_dir, mass, dist, softening_factor_sq);
+
+    if let Some(mond_fn) = mond {
+        let x = acc.magnitude() / A0_MOND;
+        acc /= mond_fn.μ(x);
+    }
+    return acc;
 }
 
 pub fn calc_acc_shell(
@@ -81,23 +93,6 @@ pub fn calc_acc_shell(
     result * AMP_SCALER
 }
 
-#[derive(Clone, Copy, PartialEq)]
-pub enum MondFn {
-    /// Famaey & Binney. More realistic fits than the standard one. `x` is a_Newton / a_0.
-    Simple,
-    /// Sanders & Noordermeer. `x` is a_Newton / a_0.
-    Standard,
-}
-
-impl MondFn {
-    pub fn μ(&self, x: f64) -> f64 {
-        match self {
-            Self::Simple => x / (1. + x),
-            Self::Standard => x / (1. + x.powi(2)).sqrt(),
-        }
-    }
-}
-
 /// An instantaneous acceleration computation, from all sources, on a single target.
 /// Either Newtonian, or Newtonian modified with MOND.
 /// `mond_params` are `(a, a_0)`.
@@ -113,7 +108,6 @@ pub fn acc_newton(
     // Compute the result in parallel and then sum the contributions.
     bodies_other
         .par_iter()
-        // .iter()
         .enumerate()
         .filter_map(|(i, body_source)| {
             if i == id_target {
@@ -124,17 +118,15 @@ pub fn acc_newton(
             let dist = acc_diff.magnitude();
             let acc_dir = acc_diff / dist; // Unit vector.
 
-            let mut acc = acc_newton_inner(acc_dir, body_source.mass, dist, softening_factor_sq);
-
-            if let Some(mond_fn) = mond {
-                let x = acc.magnitude() / A0_MOND;
-                acc = acc / mond_fn.μ(x);
-            }
-
-            Some(acc)
+            Some(acc_newton_inner_with_mond(
+                acc_dir,
+                body_source.mass,
+                dist,
+                mond,
+                softening_factor_sq,
+            ))
         })
         .reduce(Vec3::new_zero, |acc, elem| acc + elem) // Sum the contributions.
-                                                        // .fold(Vec3::new_zero(), |acc, elem| acc + elem) // Sum the contributions.
 }
 
 /// Finds the gravitomagnetic vector potential, analagous to magnetism in Maxwell's equations for EM.

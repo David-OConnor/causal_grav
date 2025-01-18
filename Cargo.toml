@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-graphics = { path = "../../graphics" }
-#lin_alg = "^1.0.1"
-lin_alg = { path = "../../lin_alg" }
+graphics = { path = "../graphics" }
+#lin_alg = "^1.0.3"
+lin_alg = { path = "../lin_alg" }
+barnes_hut = { path = "../barnes_hut", features = ["encode"]}
 egui = "^0.30.0"
 
 rand = "^0.8.5"

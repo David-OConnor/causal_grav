@@ -13,8 +13,7 @@ use plotters::{
     series::LineSeries,
 };
 
-use crate::Body;
-use crate::units::KPC_MYR_PER_KM_S;
+use crate::{units::KPC_MYR_PER_KM_S, Body};
 
 fn get_nearby_pts(bodies: &[Body], center: Vec3, r: f64, dr: f64) -> Vec<&Body> {
     // Todo: Consider a fuzzy, weighted dropoff instead of these hard boundaries. Or not;
@@ -50,10 +49,6 @@ pub fn mass_density(bodies: &[Body], center: Vec3) -> Vec<(f64, f64)> {
 
     let dr = r_max / N_SAMPLE_PTS as f64;
 
-    // todo: Fix this. I believe it depends on the model. Determines rho_0.
-    let r0_i = 0;
-    let mut rho_0 = 1.;
-
     for i in 0..N_SAMPLE_PTS {
         let r = i as f64 * dr;
 
@@ -70,18 +65,16 @@ pub fn mass_density(bodies: &[Body], center: Vec3) -> Vec<(f64, f64)> {
                 mass += nearby_mass;
             }
 
-            if i == r0_i {
-                rho_0 = mass
-            }
-
             // todo: Density; not pure mass. Although this may be fine for now as it's normalized?
             result.push((r, mass));
         }
     }
 
-    // Normalize.
+    let rho_0 = result[0].1;
+
+    // Normalize to the central mass density.
     for r in &mut result {
-        r.1 /= rho_0
+        r.1 /= rho_0;
     }
 
     result
@@ -118,13 +111,8 @@ pub fn rotation_curve(bodies: &[Body], center: Vec3, c: f64) -> Vec<(f64, f64)> 
             let mut v = 0.;
             for pt in &nearby_pts {
                 v += pt.magnitude();
-
-                // println!("RCD: {:?}", self.rotation_curve_disk[10])
-                // println!("V Mag: {:?} scaled: ", pt.magnitude(), pt.magnitude());
-
             }
 
-            // Convert to km/s
             // result.push((r, v / (KPC_MYR_PER_KM_S * nearby_pts.len() as f64 * c)));
             result.push((r, v / (KPC_MYR_PER_KM_S * nearby_pts.len() as f64)));
         }
