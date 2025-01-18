@@ -1,8 +1,14 @@
 #![allow(non_snake_case)]
 #![allow(non_ascii_idents)]
 
-use std::{path::PathBuf, time::Instant};
+use std::{
+    io,
+    path::{Path, PathBuf},
+    str::FromStr,
+    time::Instant,
+};
 
+use bincode::{Decode, Encode};
 use lin_alg::f64::Vec3;
 use rand::Rng;
 use rayon::prelude::*;
@@ -12,7 +18,7 @@ use crate::{
     barnes_hut::{BhConfig, Cube, Tree},
     body_creation::{GalaxyDescrip, GalaxyModel},
     gaussian::{COEFF_C, MAX_SHELL_R},
-    playback::{save, vec3_to_f32, GravShellSnapshot, SnapShot, DEFAULT_SNAPSHOT_FILE},
+    playback::{vec3_to_f32, GravShellSnapshot, SnapShot},
     render::render,
     units::{A0_MOND, C},
 };
@@ -67,6 +73,11 @@ mod barnes_hut;
 const BOUNDING_BOX_PAD: f64 = 0.3;
 const BB_GEN_RATIO: usize = 5;
 
+const SAVE_FILE: &str = "config.grav";
+const DEFAULT_SNAPSHOT_FILE: &str = "snapshot.grav";
+
+// todo: Custom Bincode config that only contains the fields you customize directly.
+#[derive(Encode, Decode)]
 pub struct Config {
     num_timesteps: usize,
     dt_integration_max: f64,
@@ -120,10 +131,17 @@ impl Default for Config {
             softening_factor_sq: 0.01,
             snapshot_ratio: 4,
             bh_config: BhConfig {
-                θ: 0.4,
+                // θ: 0.4,
                 ..Default::default()
             },
         }
+    }
+}
+
+impl Config {
+    /// Load the config.
+    pub fn load(&mut self, path: &Path) -> io::Result<Self> {
+        util::load(path)
     }
 }
 
@@ -134,7 +152,6 @@ pub enum ForceModel {
     Mond(MondFn),
     GaussShells,
 }
-
 
 pub struct StateUi {
     snapshot_selected: usize,
@@ -181,6 +198,29 @@ struct State {
 }
 
 impl State {
+    fn refresh_bodies(&mut self) {
+        // todo: We don't need to change rings for all cases of `redraw_bodies`, but this is harmless
+        self.config.num_rings_disk = self.config.num_bodies_disk / 10; // todo: Delegate this.
+        self.config.num_rings_bulge = self.config.num_bodies_bulge / 10; // todo: Delegate this.
+
+        self.bodies = self.ui.galaxy_descrip.make_bodies(
+            self.config.num_bodies_disk,
+            self.config.num_rings_disk,
+            self.config.num_bodies_bulge,
+            self.config.num_rings_bulge,
+        );
+        self.body_masses = self.bodies.iter().map(|b| b.mass as f32).collect();
+
+        self.snapshots = Vec::new();
+        self.take_snapshot(0., 0.); // Initial snapshot; t=0.
+
+        let rotation_curve = properties::rotation_curve(&self.bodies, Vec3::new_zero(), C);
+        let mass_density = properties::mass_density(&self.bodies, Vec3::new_zero());
+
+        properties::plot_rotation_curve(&rotation_curve, &self.ui.galaxy_model.to_str());
+        properties::plot_mass_density(&mass_density, &self.ui.galaxy_model.to_str());
+    }
+    
     fn remove_far_shells(&mut self) {
         self.shells.retain(|shell| shell.radius <= MAX_SHELL_R);
     }
@@ -205,11 +245,7 @@ impl State {
             //         )
             //     })
             //     .collect(),
-            shells: self
-                .shells
-                .iter()
-                .map(GravShellSnapshot::new)
-                .collect(),
+            shells: self.shells.iter().map(GravShellSnapshot::new).collect(),
             dt: dt as f32,
         })
     }
@@ -303,20 +339,19 @@ fn build(state: &mut State, force_model: ForceModel) {
         integrate_start_t, state.time_elapsed, farthest_r
     );
 
-    let mut start_time = Instant::now();
     let mut start_time_tree = Instant::now();
     let mut start_time_integ = Instant::now();
-    // let mut start_time_general = Instant::now();
 
     let mut bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
 
     const BENCH_RATIO: usize = 1_000;
 
-    for t in 0..state.config.num_timesteps {
-        // if t % BENCH_RATIO == 0 {
-        //     start_time_general = Instant::now();
-        // }
+    // Store a partially pre-allocated Vec of the nodes to be used by the tree, as an optimization.
+    // This is faster than creating it every time.
+    // todo: Make a guess at capacity based on bodies.
+    // let mut nodes = Vec::with_capacity(69);
 
+    for t in 0..state.config.num_timesteps {
         if force_model == ForceModel::GaussShells {
             if t % state.config.shell_creation_ratio == 0 {
                 for (id, body) in state.bodies.iter().enumerate() {
@@ -332,10 +367,9 @@ fn build(state: &mut State, force_model: ForceModel) {
             state.remove_far_shells(); // Note grouped above due to a borrow problem.
         }
 
-        // todo: Put back.
-        // if t % BB_GEN_RATIO == 0 {
-        bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
-        // }
+        if t % BB_GEN_RATIO == 0 {
+            bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
+        }
 
         if bb.width.is_nan() {
             eprintln!("Error: NaN");
@@ -352,27 +386,23 @@ fn build(state: &mut State, force_model: ForceModel) {
             start_time_tree = Instant::now();
         }
 
-        // for body in &state.bodies {
-        //     println!("Body: {:.1?}", body);
-        // }
-
         let mut tree = None;
         if force_model != ForceModel::GaussShells {
             tree = Some(Tree::new(&state.bodies, &bb, &state.config.bh_config));
         }
 
         if t % BENCH_RATIO == 0 {
-            println!("Tree time: {}μs", start_time_tree.elapsed().as_micros());
-            // start_time = Instant::now();
+            println!(
+                "t: {}k, Tree time: {}μs Tree size: {}",
+                t / 1_000,
+                start_time_tree.elapsed().as_micros(),
+                tree.as_ref().unwrap().nodes.len()
+            );
         }
 
         // Benchmarking, 100k bodies, 2025-01-16, theta = 0.4, BH algo.
         // Without rayon: Tree time: 51ms. N body time: 1,371ms
         // With rayon: Tree time: 51ms N body time: 144ms (Solid speedup)
-
-        // if t % BENCH_RATIO == 0 {
-        //     println!("N body time: {}μs", start_time.elapsed().as_micros());
-        // }
 
         state.time_elapsed += dt;
 
@@ -380,11 +410,6 @@ fn build(state: &mut State, force_model: ForceModel) {
             start_time_integ = Instant::now();
         }
         if force_model != ForceModel::GaussShells || state.time_elapsed > integrate_start_t {
-            // for body in &mut state.bodies {
-            //     body.vel += body.accel * dt;
-            //     body.posit += body.vel * dt;
-            // }
-
             // Update body motion.
             integrate::integrate_rk4(
                 &mut state.bodies,
@@ -406,10 +431,6 @@ fn build(state: &mut State, force_model: ForceModel) {
         if t % state.config.snapshot_ratio == 0 {
             state.take_snapshot(state.time_elapsed, dt);
         }
-
-        // if t % BENCH_RATIO == 0 {
-        //     println!("General time: {}μs", start_time_general.elapsed().as_micros());
-        // }
     }
 
     state.ui.building = false;
@@ -418,32 +439,19 @@ fn build(state: &mut State, force_model: ForceModel) {
 
 fn main() {
     let mut state = State::default();
-
-    state.bodies = state.ui.galaxy_descrip.make_bodies(
-        state.config.num_bodies_disk,
-        state.config.num_rings_disk,
-        state.config.num_bodies_bulge,
-        state.config.num_rings_bulge,
-    );
-    state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
+    if let Ok(cfg) = util::load(&PathBuf::from_str(SAVE_FILE).unwrap()) {
+        state.config = cfg;
+    }
 
     state.ui.dt_input = state.config.dt.to_string();
     state.ui.θ_input = state.config.bh_config.θ.to_string();
 
-    // todo: Don't auto-build, but we a graphics engine have a prob when we don't.
-    state.take_snapshot(0., 0.); // Initial snapshot; t=0.
+    state.refresh_bodies();
 
-    let rotation_curve = properties::rotation_curve(&state.bodies, Vec3::new_zero(), C);
-    let mass_density = properties::mass_density(&state.bodies, Vec3::new_zero());
 
-    properties::plot_rotation_curve(&rotation_curve, &state.ui.galaxy_model.to_str());
-    properties::plot_mass_density(&mass_density, &state.ui.galaxy_model.to_str());
-
-    if let Err(e) = save(&PathBuf::from(DEFAULT_SNAPSHOT_FILE), &state.snapshots) {
-        eprintln!("Error saving snapshots: {e}");
-    }
-
-    println!("a_0 (MOND): {:?}", A0_MOND);
+    // if let Err(e) = util::save(&PathBuf::from(DEFAULT_SNAPSHOT_FILE), &state.snapshots) {
+    //     eprintln!("Error saving snapshots: {e}");
+    // }
 
     render(state);
 }

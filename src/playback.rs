@@ -26,8 +26,6 @@ use crate::{
     GravShell,
 };
 
-pub const DEFAULT_SNAPSHOT_FILE: &str = "snapshot.cg";
-
 /// We use a custom type, vice from lin_alg, so we can impl Encode and Decode.
 #[derive(Clone, Copy, Debug, Encode, Decode)]
 pub struct Vec3f32 {
@@ -133,32 +131,4 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
         // // entity.opacity = SHELL_OPACITY;
         // entities.push(entity);
     }
-}
-
-/// Save to file, using Bincode.
-pub fn save<T: Encode>(path: &Path, data: &T) -> io::Result<()> {
-    let config = config::standard();
-
-    let encoded: Vec<u8> = bincode::encode_to_vec(data, config).unwrap();
-
-    let mut file = File::create(path)?;
-    file.write_all(&encoded)?;
-    Ok(())
-}
-
-/// Load from file, using Bincode.
-pub fn load<T: Decode>(path: &Path) -> io::Result<T> {
-    let config = config::standard();
-
-    let mut file = File::open(path)?;
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
-    let (decoded, _len) = match bincode::decode_from_slice(&buffer, config) {
-        Ok(v) => v,
-        Err(_) => {
-            eprintln!("Error loading from file. Did the format change?");
-            return Err(io::Error::new(ErrorKind::Other, "error loading"));
-        }
-    };
-    Ok(decoded)
 }

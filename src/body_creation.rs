@@ -53,7 +53,7 @@ pub struct GalaxyDescrip {
     pub shape: GalaxyShape,
     /// X: r (kpc). Y:  M☉ / kpc^2. (todo: Why not / kpc^3?)
     pub mass_density_disk: Vec<(f64, f64)>,
-    /// X: r (kpc). Y: km/s. Note: This isn't in our standard units; convert.
+    /// X: r (kpc). Y: km/s. Note: This isn't in our standard units; convert when making bodies.
     pub rotation_curve_disk: Vec<(f64, f64)>,
     /// Luminosity brightness profile. r (kpc), mu (mac arcsec^-2) -
     pub luminosity_disk: Vec<(f64, f64)>,

@@ -9,6 +9,7 @@
 
 use std::{fmt, fmt::Formatter};
 
+use bincode::{Decode, Encode};
 use lin_alg::f64::Vec3;
 use rayon::prelude::*;
 
@@ -18,7 +19,7 @@ use crate::{
     Body,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Encode, Decode)]
 pub struct BhConfig {
     /// This determines how aggressively we group. It's no lower than 0, and usually
     /// no higher than 1 (?). 0 means no grouping. (Best accuracy; poorest performance). Higher values
@@ -35,7 +36,10 @@ impl Default for BhConfig {
         Self {
             θ: 0.5,
             max_bodies_per_node: 1,
-            max_tree_depth: 15,
+            max_tree_depth: 15, // todo put back
+                                // todo: You have having trouble with the recursion. I think your depth
+                                // todo cal logic is causing you to miss sections.
+                                // max_tree_depth: 30,
         }
     }
 }
@@ -114,23 +118,17 @@ impl Cube {
     }
 
     pub fn new(center: Vec3, width: f64) -> Self {
-
-        Self {
-            center,
-            width,
-        }
+        Self { center, width }
     }
 
     /// Divide this into equal-area octants.
-    // pub(crate) fn divide_into_octants(&self) -> [Self; 8] { // todo: TS stack overflow
-    pub(crate) fn divide_into_octants(&self) -> Vec<Self> {
+    pub(crate) fn divide_into_octants(&self) -> [Self; 8] {
         let width = self.width / 2.;
         let wd2 = self.width / 4.; // short for brevity below.
 
         // Every combination of + and - for the center offset.
         // The order matters, due to the binary index logic used when partitioning bodies into octants.
-        // [
-        vec![
+        [
             Self::new(self.center + Vec3::new(-wd2, -wd2, -wd2), width),
             Self::new(self.center + Vec3::new(wd2, -wd2, -wd2), width),
             Self::new(self.center + Vec3::new(-wd2, wd2, -wd2), width),
@@ -144,7 +142,6 @@ impl Cube {
 }
 
 #[derive(Debug)]
-// todo: Implement with flat structure.
 pub struct Node {
     /// We use `id` while building the tree, then sort by it, replacing with index.
     /// Once complete, `id` == index in `Tree::nodes`.
@@ -170,77 +167,61 @@ impl fmt::Display for Node {
 #[derive(Debug)]
 /// A recursive tree. Each node can be subdivided  Terminates with `NodeType::NodeTerminal`.
 pub struct Tree {
+// pub struct Tree<'a> {
     /// Order matters; we index this by `Node::children`.
     pub nodes: Vec<Node>,
+    // pub nodes: &'a mut Vec<Node>,
 }
 
 impl Tree {
     /// Constructs a tree. Call this externaly using all bodies, once per time step.
     /// It creates the entire tree, branching until each cell has `MAX_BODIES_PER_NODE` or fewer
-    /// bodies.
+    /// bodies, or it reaches a maximum recursion depth.
     ///
     /// We partially transverse it as-required while calculating the force on a given target.
     pub fn new(bodies: &[Body], bb: &Cube, config: &BhConfig) -> Self {
         // Convert &[Body] to &[&Body].
         let body_refs: Vec<&Body> = bodies.iter().collect();
 
-        let mut nodes = Vec::new();
+        // todo: Refine this guess A/R.
+        // From an unrigorous benchmark, preallocating seems to be slightly faster, but not significantly so?
+        let mut nodes = Vec::with_capacity(bodies.len() * 7 / 4);
 
         let mut current_node_i: usize = 0;
-        // populate_nodes(&mut nodes, &body_refs, bb, &mut current_node_i);
 
         // Stack to simulate recursion: Each entry contains (bodies, bounding box, parent_id, child_index, depth).
         let mut stack = Vec::new();
         stack.push((body_refs.to_vec(), bb.clone(), None, 0));
 
-        while let Some((bodies_, bb, parent_id, depth)) = stack.pop() {
+        while let Some((bodies_, bb_, parent_id, depth)) = stack.pop() {
             if depth > config.max_tree_depth {
-                eprintln!("Tree generation: Max recusion depth exceeded.");
+                // eprintln!("Tree generation: Max recusion depth exceeded.");
                 break;
             }
             let (center_of_mass, mass) = center_of_mass(&bodies_);
 
-            if bodies_.len() <= config.max_bodies_per_node {
-                // Create a leaf node.
-                let node_id = current_node_i;
-                nodes.push(Node {
-                    id: node_id,
-                    bounding_box: bb.clone(),
-                    mass,
-                    center_of_mass,
-                    children: Vec::new(),
-                });
-                current_node_i += 1;
+            let node_id = current_node_i;
+            nodes.push(Node {
+                id: node_id,
+                bounding_box: bb_.clone(),
+                mass,
+                center_of_mass,
+                children: Vec::new(),
+            });
 
-                if let Some(pid) = parent_id {
-                    // nodes[pid].children.push(node_id);
-                    // todo: Odd: Rust is requesting an explicit type...
-                    let a: &mut Node = &mut nodes[pid];
-                    a.children.push(node_id);
-                }
-            } else {
-                // Create an internal node and push its ID.
-                let node_id = current_node_i;
-                current_node_i += 1;
+            current_node_i += 1;
 
-                nodes.push(Node {
-                    id: node_id,
-                    bounding_box: bb.clone(),
-                    mass,
-                    center_of_mass,
-                    children: Vec::new(),
-                });
+            if let Some(pid) = parent_id {
+                // Rust is requesting an explicit type here.
+                let n: &mut Node = &mut nodes[pid];
+                n.children.push(node_id);
+            }
 
-                if let Some(pid) = parent_id {
-                    // nodes[pid].children.push(node_id);
-                    // todo: Odd: Rust is requesting an explicit type...
-                    let a: &mut Node = &mut nodes[pid];
-                    a.children.push(node_id);
-                }
-
-                // Divide into octants and partition bodies.
-                let octants = bb.divide_into_octants();
-                let bodies_by_octant = partition(&bodies_, &bb);
+            // If multiple (past our threshold) bodies are in this node, create an internal node and push its ID.
+            // Divide into octants and partition bodies. Otherwise, create a leaf node.
+            if bodies_.len() > config.max_bodies_per_node {
+                let octants = bb_.divide_into_octants();
+                let bodies_by_octant = partition(&bodies_, &bb_);
 
                 // Add each octant with bodies to the stack.
                 for (i, octant) in octants.into_iter().enumerate() {
@@ -294,7 +275,7 @@ impl Tree {
 
             // Avoid self-interaction based on distance or id_target.
             // todo: Use id_target, if able.
-            if dist < 1e-8 {
+            if dist < 1e-10 {
                 continue;
             }
 
@@ -331,10 +312,8 @@ fn center_of_mass(bodies: &[&Body]) -> (Vec3, f64) {
 }
 
 /// Partition bodies into each of the 8 octants.
-// fn partition<'a>(bodies: &[&'a Body], bb: &Cube) -> [Vec<&'a Body>; 8] { // todo TS stack overflow
-fn partition<'a>(bodies: &[&'a Body], bb: &Cube) -> Vec<Vec<&'a Body>> {
-    // let mut result: [Vec<&Body>; 8] = Default::default();
-    let mut result: Vec<Vec<&Body>> = vec![Vec::new(); 8];
+fn partition<'a>(bodies: &[&'a Body], bb: &Cube) -> [Vec<&'a Body>; 8] {
+    let mut result: [Vec<&Body>; 8] = Default::default();
 
     for body in bodies {
         let mut index = 0;

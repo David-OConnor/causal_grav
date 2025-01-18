@@ -1,15 +1,10 @@
+use std::{path::PathBuf, str::FromStr};
+
 use egui::{Color32, Context, RichText, Slider, TopBottomPanel, Ui};
 use graphics::{EngineUpdates, Entity, Scene};
 use lin_alg::f32::{Quaternion, Vec3};
 
-use crate::{
-    accel::MondFn,
-    barnes_hut::{Cube, Tree},
-    body_creation::GalaxyModel,
-    build,
-    playback::{change_snapshot, SnapShot},
-    ForceModel, State, BOUNDING_BOX_PAD,
-};
+use crate::{accel::MondFn, barnes_hut::{Cube, Tree}, body_creation::GalaxyModel, build, playback::{change_snapshot, SnapShot}, util, ForceModel, State, BOUNDING_BOX_PAD, SAVE_FILE, properties};
 
 pub const ROW_SPACING: f32 = 10.;
 pub const COL_SPACING: f32 = 30.;
@@ -31,7 +26,6 @@ fn int_field(val: &mut usize, label: &str, redraw_bodies: &mut bool, ui: &mut Ui
     }
 }
 
-
 /// This function draws the (immediate-mode) GUI.
 /// [UI items](https://docs.rs/egui/latest/egui/struct.Ui.html)
 pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> EngineUpdates {
@@ -39,7 +33,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
     // This variable prevents mutliple borrow errors.
     let mut reset_snapshot = false;
-    let mut redraw_bodies = false;
+    let mut refresh_bodies = false;
 
     TopBottomPanel::top("0").show(ctx, |ui| {
         let snapshot = if state.snapshots.len() < state.ui.snapshot_selected {
@@ -120,10 +114,6 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             // todo: Populate this as you add data.
             for model in [
                 GalaxyModel::Ngc1560,
-                // GalaxyModel::Ngc3198,
-                // GalaxyModel::Ngc3115,
-                // GalaxyModel::Ngc3031,
-                // GalaxyModel::Ngc7331,
                 GalaxyModel::Ngc2685,
                 GalaxyModel::Ngc2824,
             ] {
@@ -132,7 +122,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                     .changed()
                 {
                     state.ui.galaxy_descrip = model.descrip();
-                    redraw_bodies = true;
+                    refresh_bodies = true;
                 };
             }
 
@@ -144,7 +134,6 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.add_space(ROW_SPACING);
 
             ui.label("dt:");
-            // ui.text_edit_singleline(&mut state.ui.dt_input);
             ui.add_sized(
                 [60., Ui::available_height(ui)],
                 egui::TextEdit::singleline(&mut state.ui.dt_input),
@@ -183,35 +172,24 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             int_field(
                 &mut state.config.num_bodies_disk,
                 "bodies disk",
-                &mut redraw_bodies,
+                &mut refresh_bodies,
                 ui,
             );
-            // int_field(
-            //     &mut state.config.num_rings_disk,
-            //     "rings disk",
-            //     &mut redraw_bodies,
-            //     ui,
-            // );
+
             int_field(
                 &mut state.config.num_bodies_bulge,
                 "bodies bulge",
-                &mut redraw_bodies,
+                &mut refresh_bodies,
                 ui,
             );
-            // int_field(
-            //     &mut state.config.num_rings_bulge,
-            //     "rings bulge",
-            //     &mut redraw_bodies,
-            //     ui,
-            // );
 
             if ui.button("Tree").clicked() {
                 // todo: Of current snapshot.
                 let bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
-
-                for body in &state.bodies {
-                    println!("Body: {:.4?}", body);
-                }
+                //
+                // for body in &state.bodies {
+                //     println!("Body: {:.4?}", body);
+                // }
 
                 let tree = Tree::new(&state.bodies, &bb, &state.config.bh_config);
 
@@ -224,16 +202,12 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                     .filter(|s| s.mesh != 1)
                     .collect();
 
-                for leaf in &tree.nodes {
-                    // println!("Node. {}", leaf);
-                }
-
                 let leaves = tree.leaves(
                     lin_alg::f64::Vec3::new(2., 2., 0.),
                     99999,
                     &state.config.bh_config,
                 );
-                println!("Leaf count: {:?}", leaves.len());
+                println!("Leaf count: {}. Full tree len: {}", leaves.len(), tree.nodes.len());
 
                 for leaf in leaves {
                     let c = leaf.bounding_box.center;
@@ -251,6 +225,17 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 }
 
                 engine_updates.entities = true;
+            }
+
+            ui.add_space(COL_SPACING * 2.);
+
+            if ui
+                .button(RichText::new("Save").color(Color32::GOLD))
+                .clicked()
+            {
+                if util::save(&PathBuf::from_str(SAVE_FILE).unwrap(), &state.config).is_err() {
+                    println!("Error saving config.")
+                }
             }
         });
         ui.add_space(ROW_SPACING);
@@ -270,24 +255,11 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
         ui.add_space(ROW_SPACING);
     });
 
-    if redraw_bodies {
-        // todo: We don't need to change rings for all cases of `redraw_bodies`, but this is harmless
-        state.config.num_rings_disk = state.config.num_bodies_disk / 10; // todo: Delegate this.
-        state.config.num_rings_bulge = state.config.num_bodies_bulge / 10; // todo: Delegate this.
-
-        state.bodies = state.ui.galaxy_descrip.make_bodies(
-            state.config.num_bodies_disk,
-            state.config.num_rings_disk,
-            state.config.num_bodies_bulge,
-            state.config.num_rings_bulge,
-        );
-        state.body_masses = state.bodies.iter().map(|b| b.mass as f32).collect();
-
-        state.snapshots = Vec::new();
-        state.take_snapshot(0., 0.); // Initial snapshot; t=0.
-
+    if refresh_bodies {
         reset_snapshot = true;
         engine_updates.entities = true;
+
+        state.refresh_bodies()
     }
 
     if reset_snapshot {

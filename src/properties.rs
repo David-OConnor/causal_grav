@@ -4,7 +4,7 @@
 
 // todo: You're mixing kpc (mass) with km/s (rotation velocity)
 
-const N_SAMPLE_PTS: usize = 20;
+const N_SAMPLE_PTS: usize = 40;
 
 use lin_alg::f64::Vec3;
 use plotters::{
@@ -14,6 +14,7 @@ use plotters::{
 };
 
 use crate::Body;
+use crate::units::KPC_MYR_PER_KM_S;
 
 fn get_nearby_pts(bodies: &[Body], center: Vec3, r: f64, dr: f64) -> Vec<&Body> {
     // Todo: Consider a fuzzy, weighted dropoff instead of these hard boundaries. Or not;
@@ -93,7 +94,7 @@ pub fn luminosity(bodies: &[Body]) -> Vec<(f64, f64)> {
     result
 }
 
-/// Normalized rotation curve. X: r (kpc). Y: V/c
+/// Normalized rotation curve. X: r (kpc). Y: V/c, or km/s, or kpc/MLY?
 /// We specify r_max, to avoid calculations involving outliers. But, perhaps should calculate anyway.
 /// todo: In km/s for now, not V/C.
 pub fn rotation_curve(bodies: &[Body], center: Vec3, c: f64) -> Vec<(f64, f64)> {
@@ -108,7 +109,7 @@ pub fn rotation_curve(bodies: &[Body], center: Vec3, c: f64) -> Vec<(f64, f64)> 
 
         let nearby_pts: Vec<Vec3> = get_nearby_pts(&bodies, center, r, dr)
             .into_iter()
-            .map(|b2| b2.posit)
+            .map(|b2| b2.vel)
             .collect();
 
         if nearby_pts.is_empty() {
@@ -117,9 +118,15 @@ pub fn rotation_curve(bodies: &[Body], center: Vec3, c: f64) -> Vec<(f64, f64)> 
             let mut v = 0.;
             for pt in &nearby_pts {
                 v += pt.magnitude();
+
+                // println!("RCD: {:?}", self.rotation_curve_disk[10])
+                // println!("V Mag: {:?} scaled: ", pt.magnitude(), pt.magnitude());
+
             }
-            // result.push((r, v / (nearby_pts.len() as f64 * c)));
-            result.push((r, v / (nearby_pts.len() as f64)));
+
+            // Convert to km/s
+            // result.push((r, v / (KPC_MYR_PER_KM_S * nearby_pts.len() as f64 * c)));
+            result.push((r, v / (KPC_MYR_PER_KM_S * nearby_pts.len() as f64)));
         }
     }
 
@@ -197,9 +204,11 @@ pub fn plot_rotation_curve(data: &[(f64, f64)], desc: &str) {
     plot(
         data,
         "r (kpc)",
-        "v / c",
-        &format!("Normalized rotation curve of {desc}"),
-        "rot_plot",
+        // "v / c",
+        "km/s",
+        // &format!("Normalized rotation curve of {desc}"),
+        &format!("Rotation curve of {desc}"),
+        &format!("rot_plot_{desc}"),
     );
 }
 
@@ -209,6 +218,6 @@ pub fn plot_mass_density(data: &[(f64, f64)], desc: &str) {
         "r (kpc)",
         "ρ / ρ₀",
         &format!("Normalized mass density of {desc}"),
-        "mass_plot",
+        &format!("mass_plot_{desc}"),
     );
 }
