@@ -2,6 +2,7 @@ use lin_alg::f64::Vec3;
 
 use crate::Body;
 
+/// Compute acceleration, position, and velocity, using RK4.
 pub fn integrate_rk4<F>(body: &mut Body, id: usize, acc: &F, dt: f64)
 where
     F: Fn(usize, Vec3) -> Vec3,

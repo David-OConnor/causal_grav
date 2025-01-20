@@ -37,15 +37,8 @@ impl Body {
     pub fn create_ray(&self, emitter_id: usize) -> GravRay {
         let mut rng = rand::thread_rng();
 
-        // todo: You could also generate a random quaternion.
+        let unit_vec = util::random_unit_vec(&rng);
 
-        let theta = rng.gen_range(0.0..TAU); // Random angle in [0, 𝜏)
-        let cos_phi = rng.gen_range(-1.0..1.0); // Uniform in [-1, 1]
-        let sin_phi = (1.0_f64 - cos_phi * cos_phi).sqrt();
-
-        let x = sin_phi * theta.cos();
-        let y = sin_phi * theta.sin();
-        let z = cos_phi;
         let unit_vec = Vec3::new(x, y, z);
         GravRay {
             emitter_id,

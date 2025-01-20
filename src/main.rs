@@ -32,6 +32,7 @@ mod fluid_dynamics;
 mod galaxy_data;
 mod gaussian;
 mod gem;
+mod image_parsing;
 mod integrate;
 mod playback;
 mod properties;
@@ -76,6 +77,9 @@ const BB_GEN_RATIO: usize = 5;
 const SAVE_FILE: &str = "config.grav";
 const DEFAULT_SNAPSHOT_FILE: &str = "snapshot.grav";
 
+const DISK_RING_PORTION: usize = 10;
+const BULGE_RING_PORTION: usize = 5;
+
 // todo: Custom Bincode config that only contains the fields you customize directly.
 #[derive(Encode, Decode)]
 pub struct Config {
@@ -111,10 +115,6 @@ impl Default for Config {
         let num_bodies_disk = 300;
         let num_bodies_bulge = 100;
 
-        // todo: Delegate this.
-        let num_rings_disk = num_bodies_disk / 10;
-        let num_rings_bulge = num_bodies_bulge / 10;
-
         Self {
             num_timesteps: 5_000,
             shell_creation_ratio,
@@ -125,9 +125,9 @@ impl Default for Config {
             // num_rays_per_iter: 200,
             gauss_c: shell_spacing * COEFF_C,
             num_bodies_disk,
-            num_rings_disk,
+            num_rings_disk: 0, // Set later
             num_bodies_bulge,
-            num_rings_bulge,
+            num_rings_bulge: 0, // Set later
             softening_factor_sq: 0.01,
             snapshot_ratio: 4,
             bh_config: BhConfig {
@@ -200,8 +200,8 @@ struct State {
 impl State {
     fn refresh_bodies(&mut self) {
         // todo: We don't need to change rings for all cases of `redraw_bodies`, but this is harmless
-        self.config.num_rings_disk = self.config.num_bodies_disk / 10; // todo: Delegate this.
-        self.config.num_rings_bulge = self.config.num_bodies_bulge / 10; // todo: Delegate this.
+        self.config.num_rings_disk = self.config.num_bodies_disk / DISK_RING_PORTION;
+        self.config.num_rings_bulge = self.config.num_bodies_bulge / BULGE_RING_PORTION;
 
         self.bodies = self.ui.galaxy_descrip.make_bodies(
             self.config.num_bodies_disk,

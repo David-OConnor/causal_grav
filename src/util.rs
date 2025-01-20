@@ -1,4 +1,5 @@
 use std::{
+    f64::consts::TAU,
     fs::File,
     io,
     io::{ErrorKind, Read, Write},
@@ -6,6 +7,8 @@ use std::{
 };
 
 use bincode::{config, Decode, Encode};
+use lin_alg::f64::Vec3;
+use rand::{rngs::ThreadRng, Rng};
 
 use crate::{Body, State};
 
@@ -108,4 +111,24 @@ pub fn load<T: Decode>(path: &Path) -> io::Result<T> {
         }
     };
     Ok(decoded)
+}
+
+pub fn volume_sphere(r: f64) -> f64 {
+    const COEFF: f64 = 2. / 3. * TAU;
+    r.powi(3) * COEFF
+}
+
+pub fn random_unit_vec(rng: &mut ThreadRng) -> Vec3 {
+    let θ = rng.gen_range(0.0..TAU);
+
+    // Random phi for polar angle with area weighting
+    let u: f64 = rng.gen_range(-1.0..1.0); // Uniform random variable
+    let ϕ = u.acos(); // Inverse cosine for area-preserving sampling
+
+    // Convert spherical coordinates to Cartesian coordinates
+    let x = ϕ.sin() * θ.cos();
+    let y = ϕ.sin() * θ.sin();
+    let z = ϕ.cos();
+
+    Vec3::new(x, y, z)
 }

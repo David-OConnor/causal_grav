@@ -6,14 +6,14 @@
 
 const N_SAMPLE_PTS: usize = 40;
 
-use lin_alg::f64::Vec3;
+use lin_alg::{f64::Vec3, linspace, logspace};
 use plotters::{
     element::PathElement,
     prelude::{BitMapBackend, ChartBuilder, Color, IntoDrawingArea, BLACK, BLUE, WHITE},
     series::LineSeries,
 };
 
-use crate::{units::KPC_MYR_PER_KM_S, Body};
+use crate::{units::KPC_MYR_PER_KM_S, util::volume_sphere, Body};
 
 fn get_nearby_pts(bodies: &[Body], center: Vec3, r: f64, dr: f64) -> Vec<&Body> {
     // Todo: Consider a fuzzy, weighted dropoff instead of these hard boundaries. Or not;
@@ -41,32 +41,33 @@ fn find_r_max(bodies: &[Body], center: Vec3) -> f64 {
     result
 }
 
-/// Normalized mass density. X: r (kpc). Y: ρ/ρ_0
+/// Normalized mass density. X: r (kpc). Y: ρ/ρ_0.
 pub fn mass_density(bodies: &[Body], center: Vec3) -> Vec<(f64, f64)> {
     let mut result = Vec::with_capacity(N_SAMPLE_PTS);
 
     let r_max = find_r_max(bodies, center);
-
     let dr = r_max / N_SAMPLE_PTS as f64;
 
-    for i in 0..N_SAMPLE_PTS {
-        let r = i as f64 * dr;
+    // Note we start at 0: Don't want to take the volume of r=0.
+    for r in linspace(0., r_max, N_SAMPLE_PTS) {
+        // let r = i as f64 * dr;
 
         let nearby_masses: Vec<f64> = get_nearby_pts(bodies, center, r, dr)
             .into_iter()
             .map(|b2| b2.mass)
             .collect();
 
-        if nearby_masses.is_empty() {
-            result.push((r, 0.));
-        } else {
+        if !nearby_masses.is_empty() {
             let mut mass = 0.;
             for nearby_mass in &nearby_masses {
                 mass += nearby_mass;
             }
 
             // todo: Density; not pure mass. Although this may be fine for now as it's normalized?
-            result.push((r, mass));
+            let volume = volume_sphere(r);
+            if volume.abs() > f64::EPSILON {
+                result.push((r, mass / volume));
+            }
         }
     }
 
@@ -94,11 +95,11 @@ pub fn rotation_curve(bodies: &[Body], center: Vec3, c: f64) -> Vec<(f64, f64)> 
     let mut result = Vec::with_capacity(N_SAMPLE_PTS);
 
     let r_max = find_r_max(bodies, center);
-
     let dr = r_max / N_SAMPLE_PTS as f64;
 
-    for i in 0..N_SAMPLE_PTS {
-        let r = i as f64 * dr;
+    // for i in 0..N_SAMPLE_PTS {
+    for r in linspace(0., r_max, N_SAMPLE_PTS) {
+        // let r = i as f64 * dr;
 
         let nearby_pts: Vec<Vec3> = get_nearby_pts(&bodies, center, r, dr)
             .into_iter()

@@ -4,10 +4,82 @@
 
 use crate::{
     body_creation::{mass_density_from_lum, GalaxyDescrip, GalaxyShape},
-    units::ARCSEC_CONV_FACTOR,
+    properties::mass_density,
+    units::{ARCSEC_CONV_FACTOR, KPC_MYR_PER_KM_S},
     util::{scale_x_axis, zip_data},
 };
 // todo: Method to auto-parse from SPARC etc Rotmod dat files?
+
+/// A subset of GalaxyDescrip, from SPARC .dat file data. In units provided by SPARC, which
+/// are not the same units we use internally.
+struct SparcData {
+    /// kpc
+    pub r: Vec<f64>,
+    /// X: r (kpc). Y:  M☉ / pc^2.
+    pub mass_density_disk: Vec<f64>,
+    /// X: r (kpc). Y: km/s
+    pub velocity_disk: Vec<f64>,
+    // /// Luminosity brightness profile. r (kpc), mu (mac arcsec^-2) -
+    // pub luminosity_disk: Vec<(f64, f64)>,
+    /// X: r (kpc). Y:  M☉ / pc^2. (todo: Why not / kpc^3?)
+    pub mass_density_bulge: Vec<f64>,
+    /// X: r (kpc). Y: km/s
+    pub velocity_bulge: Vec<f64>,
+    pub mass_disk: f64,
+    pub mass_bulge: f64,
+}
+
+impl SparcData {
+    /// Handles unit conversions, and zipping radius with each param, since in the general case,
+    /// velocity, mass, and luminosity data may not have the same radius indexes.
+    fn galaxy_descrip(
+        &self,
+    ) -> (
+        Vec<(f64, f64)>,
+        Vec<(f64, f64)>,
+        Vec<(f64, f64)>,
+        Vec<(f64, f64)>,
+    ) {
+        // M☉/pc^2
+        let density_disk_ = self.mass_density_disk.iter().map(|v| v * 1e6).collect(); // convert to M☉/kpc^2
+
+        // kpc/MYR
+        let velocity_disk = self
+            .velocity_disk
+            .iter()
+            .map(|v| v * KPC_MYR_PER_KM_S)
+            .collect();
+
+        // At the disk radius indexies. M☉/pc^2
+        let density_bulge_ = self
+            .mass_density_bulge
+            .iter()
+            .enumerate()
+            .map(|(i, v)| {
+                // todo: Attempting to figure out why the SPARC units for bulge mass density are in
+                // todo: Units of area.
+                // pi r^2 / pi r^3 = 1/r
+                // let divisor = if r[i].abs() < f64::EPSILON { 1.0 } else { r[i] };
+                let divisor = 1.;
+                v * 1e6 / divisor
+            })
+            .collect(); // convert to M☉/kpc^3;
+
+        // kpc/MYR
+        let velocity_bulge = self
+            .velocity_bulge
+            .iter()
+            .map(|v| v * KPC_MYR_PER_KM_S)
+            .collect();
+
+        (
+            zip_data(&self.r, density_disk_),
+            zip_data(&self.r, velocity_disk),
+            zip_data(&self.r, density_bulge_),
+            zip_data(&self.r, velocity_bulge),
+        )
+    }
+}
 
 pub fn ngc_1560() -> GalaxyDescrip {
     // These rotation curve values are from Broeils.
@@ -254,8 +326,25 @@ pub fn ngc_1560() -> GalaxyDescrip {
     // Convert the x values from arcsec ('') to kpc.
     let α_conv_factor = ARCSEC_CONV_FACTOR * dist_from_earth;
     let luminosity = scale_x_axis(&luminosity_arcsec, α_conv_factor);
-    let rotation_curve = scale_x_axis(&rot_curve_arcsec, α_conv_factor);
-    let rotation_curve_corr = scale_x_axis(&rot_curve_corr_arcsec, α_conv_factor);
+
+    let rotation_curve = scale_x_axis(&rot_curve_arcsec, α_conv_factor)
+        .into_iter()
+        .map(|(r, v)| (r, v * KPC_MYR_PER_KM_S))
+        .collect();
+
+    // let rotation_curve_corr = scale_x_axis(&rot_curve_corr_arcsec, α_conv_factor)
+    //     .into_iter()
+    //     .map(|(r, v)| (r, v * KPC_MYR_PER_KM_S))
+    //     .collect();
+
+    // let (mass_density_disk, rotation_curve_disk, mass_density_bulge, rotation_curve_bulge) =
+    //     density_vel_from_sparc(
+    //         &radius,
+    //         &density_disk_,
+    //         &velocity_disk_,
+    //         &density_bulge_,
+    //         &velocity_bulge_,
+    //     );
 
     // solar masses
     let mass_disk = 1.2e10; // H mass: 8.2e8 solar masses.
@@ -275,8 +364,7 @@ pub fn ngc_1560() -> GalaxyDescrip {
         mass_density_bulge: vec![], // Thin disk
         rotation_curve_bulge: vec![],
         luminosity_bulge: vec![],
-        eccentricity: 0.0, // todo temp
-        // eccentricity: 0.18, // Broeils
+        eccentricity: 0.18, // Broeils
         arm_count: 0,
         // Gentile (2024), section 6. Note: s_0 is 0.8e-24 g/cm^3.
         burkert_params: (5.6, 1.182e7),
@@ -358,7 +446,7 @@ pub fn ngc_2685() -> GalaxyDescrip {
         25.38973,
     ];
 
-    // At the disk radius indexies. M☉/pc^2
+    // M☉/pc^2
     let density_disk_ = vec![
         2025.89108, 1939.86514, 1930.82150, 1921.82001, 1911.58398, 1900.13359, 1888.75180,
         1874.93325, 1861.21581, 1845.13362, 1827.96971, 1809.75695, 1789.33508, 1766.78323,
@@ -369,10 +457,7 @@ pub fn ngc_2685() -> GalaxyDescrip {
         148.23835, 108.79154, 77.59057, 58.31954, 44.03678, 32.82585, 28.80156, 21.64792, 16.15162,
         12.36563, 10.59293, 9.29429, 7.65978, 5.52352, 3.87807, 2.45141, 1.29365, 1.13715, 0.68090,
         0.43749, 0.28110, 0.18062, 0.11605, 0.07457, 0.04791,
-    ]
-    .into_iter()
-    .map(|v| v * 1e6)
-    .collect(); // convert to M☉/kpc^2;
+    ];
 
     // At the disk radius indexies. km/s
     let velocity_disk_ = vec![
@@ -387,7 +472,7 @@ pub fn ngc_2685() -> GalaxyDescrip {
         78.376724, 75.321101, 72.144864, 69.337426, 66.795913, 64.500683, 62.430336, 60.624714,
     ];
 
-    // At the disk radius indexies. M☉/pc^2
+    // M☉/pc^2
     let density_bulge_ = vec![
         29637.09388,
         29637.09388,
@@ -439,31 +524,24 @@ pub fn ngc_2685() -> GalaxyDescrip {
         0.00074,
         0.00014,
         0.00002,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(i, v)| {
-        let divisor = if radius[i] == 0.0 { 1.0 } else { radius[i] };
-        v * 1e6 / divisor
-    })
-    .collect(); // convert to M☉/kpc^3;
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ];
 
     // km/s
     let velocity_bulge_ = vec![
@@ -479,38 +557,43 @@ pub fn ngc_2685() -> GalaxyDescrip {
         41.181553, 40.021351,
     ];
 
-    let mass_density_disk = zip_data(&radius, density_disk_);
-    let velocity_disk = zip_data(&radius, velocity_disk_);
-    let mass_density_bulge = zip_data(&radius, density_bulge_);
-    let velocity_bulge = zip_data(&radius, velocity_bulge_);
+    let sparc_data = SparcData {
+        r: radius,
+        mass_density_disk: density_disk_,
+        velocity_disk: velocity_disk_,
+        mass_density_bulge: density_bulge_,
+        velocity_bulge: velocity_bulge_,
+        mass_disk: 20.6046e9,
+        mass_bulge: 9.4320e9,
+    };
 
-    let mass_disk = 20.6046e9;
-    let mass_bulge = 9.4320e9;
+    let (mass_density_disk, rotation_curve_disk, mass_density_bulge, rotation_curve_bulge) =
+        sparc_data.galaxy_descrip();
 
     // todo: Mass and rotation for the bulge.
 
     GalaxyDescrip {
         shape: GalaxyShape::LenticularRingSeyfertType2,
         mass_density_disk,
-        rotation_curve_disk: velocity_disk,
+        rotation_curve_disk,
         luminosity_disk: vec![], // todo
         mass_density_bulge,
-        rotation_curve_bulge: velocity_bulge,
+        rotation_curve_bulge,
         luminosity_bulge: vec![], // todo
         eccentricity: 0.,         // todo
         arm_count: 0,             // todo
         burkert_params: (0., 0.), // todo
         r_s: 0.,                  // todo
-        mass_disk,
-        mass_bulge,
+        mass_disk: sparc_data.mass_disk,
+        mass_bulge: sparc_data.mass_bulge,
         mass_to_light_ratio: 0.,  // todo
         dist_from_earth: 14.79e3, // Wikipedia
     }
 }
 
 /// SPARC Rotmod_ETG
+/// NGC2824_disk.dat. kpc. For disk and bulge.
 pub fn ngc_2824() -> GalaxyDescrip {
-    // NGC2824_disk.dat. kpc. For disk and bulge.
     let radius = vec![
         0.00000, 0.12479, 0.13823, 0.15167, 0.16703, 0.18431, 0.20159, 0.22270, 0.24382, 0.26878,
         0.29566, 0.32446, 0.35709, 0.39357, 0.43197, 0.47613, 0.52412, 0.57596, 0.63355, 0.69691,
@@ -520,7 +603,7 @@ pub fn ngc_2824() -> GalaxyDescrip {
         12.16041, 13.37760,
     ];
 
-    // At the disk radius indexies. M☉/pc^2
+    // M☉/pc^2
     let density_disk_ = vec![
         6238.98586, 5309.65746, 5218.22652, 5128.37001, 5027.56994, 4916.53615, 4807.95454,
         4678.49490, 4552.52112, 4408.00897, 4257.50647, 4101.95139, 3932.51506, 3751.41380,
@@ -529,25 +612,20 @@ pub fn ngc_2824() -> GalaxyDescrip {
         773.23372, 633.74339, 495.12393, 370.43669, 268.85245, 192.62560, 147.33774, 114.89840,
         96.36382, 82.62548, 73.70789, 66.05626, 59.03560, 39.76619, 26.05637, 18.10982, 15.51365,
         11.76830, 10.51753, 8.11174, 6.36669, 4.49484, 4.44134,
-    ]
-    .into_iter()
-    .map(|v| v * 1e6)
-    .collect(); // convert to M☉/kpc^2
+    ];
 
     // At the disk radius indexies. km/s
     let velocity_disk_ = vec![
-        0.000000, 33.517614, 36.787605, 39.996933, 43.603965, 47.581888, 51.445770, 56.027996,
-        60.495887, 65.630964, 70.949192, 76.463117, 82.466260, 88.778166, 95.181257, 102.123863,
-        109.186352, 116.319076, 123.659274, 131.077472, 138.452257, 145.640479, 152.549992,
-        159.521405, 165.708430, 170.410751, 174.592974, 178.756782, 182.648707, 185.866435,
-        187.791580, 187.948079, 186.062472, 182.671018, 177.775649, 172.484678, 167.055254,
-        162.011551, 157.382832, 153.755473, 151.275223, 148.862110, 143.914483, 137.866121,
-        131.945657, 126.861749, 121.861989, 117.786450, 113.629696, 109.724267, 107.707366,
+        0., 33.517614, 36.787605, 39.996933, 43.603965, 47.581888, 51.445770, 56.027996, 60.495887,
+        65.630964, 70.949192, 76.463117, 82.466260, 88.778166, 95.181257, 102.123863, 109.186352,
+        116.319076, 123.659274, 131.077472, 138.452257, 145.640479, 152.549992, 159.521405,
+        165.708430, 170.410751, 174.592974, 178.756782, 182.648707, 185.866435, 187.791580,
+        187.948079, 186.062472, 182.671018, 177.775649, 172.484678, 167.055254, 162.011551,
+        157.382832, 153.755473, 151.275223, 148.862110, 143.914483, 137.866121, 131.945657,
+        126.861749, 121.861989, 117.786450, 113.629696, 109.724267, 107.707366,
     ];
 
-    // pi r^2 / pi r^3 = 1/r
-
-    // At the disk radius indexies. M☉/pc^2
+    // M☉/pc^2
     let density_bulge_ = vec![
         19929.70080,
         19929.70080,
@@ -581,70 +659,66 @@ pub fn ngc_2824() -> GalaxyDescrip {
         0.00098,
         0.00012,
         0.00001,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-        0.00000,
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(i, v)| {
-        let divisor = if radius[i] == 0.0 { 1.0 } else { radius[i] };
-        v * 1e6 / divisor
-    })
-    .collect(); // convert to M☉/kpc^3;
+        0.,
+        0.,
+        0.,
+        0.,
+        0.,
+        0.,
+        0.,
+        0.,
+        0.,
+        0.,
+        0.,
+        0.,
+        0.,
+        0.,
+        0.,
+        0.,
+        0.,
+        0.,
+    ];
 
     // km/s
     let velocity_bulge_ = vec![
-        0.000000, 88.399177, 101.509195, 112.280335, 123.138977, 135.232161, 146.115845,
-        157.543821, 168.533135, 179.951289, 191.930881, 202.089477, 210.782109, 219.682516,
-        224.190533, 227.383737, 228.084656, 227.845947, 226.343141, 222.696708, 214.967925,
-        205.905089, 196.866884, 188.352819, 178.575062, 171.446095, 163.536416, 155.689078,
-        148.472538, 141.467596, 134.687368, 128.616150, 122.625640, 116.931754, 111.482717,
-        106.281837, 101.330189, 96.626576, 92.125696, 87.838396, 83.753710, 79.850645, 76.140453,
-        72.597047, 69.214173, 65.995437, 62.921535, 59.992739, 57.203311, 54.540358, 51.999958,
+        0.0, 88.399177, 101.509195, 112.280335, 123.138977, 135.232161, 146.115845, 157.543821,
+        168.533135, 179.951289, 191.930881, 202.089477, 210.782109, 219.682516, 224.190533,
+        227.383737, 228.084656, 227.845947, 226.343141, 222.696708, 214.967925, 205.905089,
+        196.866884, 188.352819, 178.575062, 171.446095, 163.536416, 155.689078, 148.472538,
+        141.467596, 134.687368, 128.616150, 122.625640, 116.931754, 111.482717, 106.281837,
+        101.330189, 96.626576, 92.125696, 87.838396, 83.753710, 79.850645, 76.140453, 72.597047,
+        69.214173, 65.995437, 62.921535, 59.992739, 57.203311, 54.540358, 51.999958,
     ];
 
-    println!("\n\nBulge data A: {:?}\n\n", density_bulge_);
+    let sparc_data = SparcData {
+        r: radius,
+        mass_density_disk: density_disk_,
+        velocity_disk: velocity_disk_,
+        mass_density_bulge: density_bulge_,
+        velocity_bulge: velocity_bulge_,
+        mass_disk: 31.1825e9,
+        mass_bulge: 8.3897e9,
+    };
 
-    let mass_density_disk = zip_data(&radius, density_disk_);
-    let velocity_disk = zip_data(&radius, velocity_disk_);
-    let mass_density_bulge = zip_data(&radius, density_bulge_);
-    let velocity_bulge = zip_data(&radius, velocity_bulge_);
-
-    let mass_disk = 31.1825e9;
-    let mass_bulge = 8.3897e9;
+    let (mass_density_disk, rotation_curve_disk, mass_density_bulge, rotation_curve_bulge) =
+        sparc_data.galaxy_descrip();
 
     // todo: Mass and rotation for the bulge.
 
     GalaxyDescrip {
         shape: GalaxyShape::Lenticular,
         mass_density_disk,
-        rotation_curve_disk: velocity_disk,
+        rotation_curve_disk,
         luminosity_disk: vec![], // todo
         mass_density_bulge,
-        rotation_curve_bulge: velocity_bulge,
+        rotation_curve_bulge,
         luminosity_bulge: vec![], // todo
         eccentricity: 0.,         // todo
         arm_count: 0,             // todo
         burkert_params: (0., 0.), // todo
         r_s: 0.,                  // todo
-        mass_disk,
-        mass_bulge,
+        mass_disk: sparc_data.mass_disk,
+        mass_bulge: sparc_data.mass_bulge,
         mass_to_light_ratio: 0., // todo
         dist_from_earth: 0.,     // Not sure.
     }
