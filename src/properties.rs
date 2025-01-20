@@ -50,8 +50,6 @@ pub fn mass_density(bodies: &[Body], center: Vec3) -> Vec<(f64, f64)> {
 
     // Note we start at 0: Don't want to take the volume of r=0.
     for r in linspace(0., r_max, N_SAMPLE_PTS) {
-        // let r = i as f64 * dr;
-
         let nearby_masses: Vec<f64> = get_nearby_pts(bodies, center, r, dr)
             .into_iter()
             .map(|b2| b2.mass)

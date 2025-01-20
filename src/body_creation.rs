@@ -107,6 +107,7 @@ fn ring_volume(r: f64, dr: f64) -> f64 {
 }
 
 impl GalaxyDescrip {
+    // todo: Remove this.
     fn make_disk(&self, num_bodies: usize, num_rings: usize) -> Vec<Body> {
         if self.mass_density_disk.is_empty() {
             return Vec::new();
@@ -217,144 +218,6 @@ impl GalaxyDescrip {
         result
     }
 
-    fn make_bulge(&self, num_bodies: usize, num_rings: usize) -> Vec<Body> {
-        // todo: DRY between this and disk; consolidate.
-        // todo: maybe combine these into the same fn. Or, combine common code into a helper.
-        if self.mass_density_bulge.is_empty() {
-            return Vec::new();
-        }
-
-        let mut result = Vec::with_capacity(num_bodies);
-        let mut rng = rand::thread_rng();
-
-        // Note: We are choosing the r range here based on mass density; not velocity.
-        let r_last = self.mass_density_bulge.last().unwrap().0;
-        let dr = r_last / num_rings as f64;
-        let r_all = linspace(self.mass_density_bulge[0].0, r_last, num_rings);
-
-        // println!("R ALL: {:?}", r_all);
-
-        let total_volume = volume_sphere(r_last);
-
-        let mut mass_sample_total = 0.;
-        for r in &r_all {
-            mass_sample_total += interpolate(&self.mass_density_bulge, *r).unwrap();
-        }
-
-        // todo: Experimenting with fixed mass.
-        let mass_per_body = self.mass_bulge / num_bodies as f64;
-        println!("Bulge mass-per-body: {:.6}", mass_per_body);
-
-        let mut n_bodies_by_r = Vec::with_capacity(r_all.len());
-        for r in &r_all {
-            let mass_this_r = interpolate(&self.mass_density_bulge, *r).unwrap();
-
-            // todo: we go below and above for this. Check we're not below dr/2?
-            // let bodies_this_r = if *r < 1.0e-8 {
-            let bodies_this_r = if *r < dr / 2. {
-                1
-            } else {
-                let volume_this_r = ring_volume(*r, dr);
-
-                let volume_portion = volume_this_r / total_volume;
-                println!("Vol port at r{:.4}: {}", r, volume_portion);
-
-                // Trying this: Choose number of bodies based on volume;
-                (volume_portion * mass_this_r) as usize
-
-                // (mass_this_r / volume_this_r) as usize // todo:
-
-                // todo: Experimenting.
-                // (100. * volume_portion * num_bodies as f64) as usize
-            };
-            println!("Bodies at r{:.4}: {}", r, bodies_this_r);
-
-            // let bodies_this_r = (mass_portion * num_bodies as f64) as usize;
-
-            // M☉
-            // let mass_per_body_ = if bodies_this_r == 0 {
-            //     0.
-            // } else {
-            //     mass_this_r / bodies_this_r as f64
-            // };
-
-            n_bodies_by_r.push(bodies_this_r);
-        }
-
-        // Normalize body count.
-        let count: usize = n_bodies_by_r.iter().sum();
-
-        for (i, r) in r_all.iter().enumerate() {
-            let bodies_this_r = n_bodies_by_r[i] * num_bodies / count;
-            // todo: Dup with above!
-            let mass_this_r = interpolate(&self.mass_density_bulge, *r).unwrap();
-
-            println!(
-                "Bulge. r: {r} N bodies: {:?} rho: {:.4?}, mass per: {:.6?}",
-                // "Bulge. r: {r} N bodies: {:?} rho: {:.4?}, mass per: {:?}",
-                bodies_this_r,
-                mass_this_r,
-                mass_per_body
-            );
-
-            let v_mag = interpolate(&self.rotation_curve_bulge, *r).unwrap();
-
-            for _ in 0..bodies_this_r {
-                let θ = rng.gen_range(0.0..TAU);
-
-                // Random phi for polar angle with area weighting
-                let u: f64 = rng.gen_range(-1.0..1.0); // Uniform random variable
-                let ϕ = u.acos(); // Inverse cosine for area-preserving sampling
-
-                // Convert spherical coordinates to Cartesian coordinates
-                let x = r * ϕ.sin() * θ.cos();
-                let y = r * ϕ.sin() * θ.sin();
-                let z = r * ϕ.cos();
-
-                let scale_x = 1.0 - self.eccentricity; // Eccentricity factor for x-axis
-                let posit = Vec3::new(x * scale_x, y, z);
-
-                // Velocity direction: perpendicular to the radius vector
-                let v_x = θ.sin() * ϕ.cos(); // Velocity component in x-direction
-                let v_y = θ.sin() * ϕ.sin();
-                let v_z = θ.cos();
-
-                let mut vel = Vec3::new(v_x / scale_x, v_y, v_z);
-
-                // Normalize velocity vector and scale to v_mag
-                vel = vel.to_normalized() * v_mag;
-
-                result.push(Body {
-                    posit,
-                    vel,
-                    accel: Vec3::new_zero(),
-                    mass: mass_per_body,
-                })
-            }
-        }
-
-        let mut mass_sum = 0.;
-        for body in &result {
-            mass_sum += body.mass;
-        }
-
-        let mass_scaler = self.mass_bulge / mass_sum;
-        for body in &mut result {
-            body.mass *= mass_scaler;
-        }
-
-        // This loop is just diagnostic.
-        let mut mass_count = 0.;
-        for body in &mut result {
-            mass_count += body.mass;
-        }
-
-        println!("Total bulge body count: {:?}", result.len());
-        println!("Total bulge mass: {:.0?} e9", mass_count / 1e9);
-
-        result
-    }
-
     /// See the `properties` module for info on distributions
     /// todo: Luminosity A/R
     pub fn make_bodies(
@@ -366,8 +229,34 @@ impl GalaxyDescrip {
     ) -> Vec<Body> {
         let mut result = Vec::with_capacity(num_bodies_disk + num_bodies_bulge);
 
-        result.append(&mut self.make_disk(num_bodies_disk, num_rings_disk));
-        result.append(&mut self.make_bulge(num_bodies_bulge, num_rings_bulge));
+        // result.append(&mut self.make_disk(num_bodies_disk, num_rings_disk));
+        println!("\nMaking disk bodies...");
+        result.append(&mut make_distrib(
+            &self.mass_density_disk,
+            &self.rotation_curve_disk,
+            self.mass_disk,
+            self.eccentricity,
+            num_bodies_disk,
+            num_rings_disk,
+            false,
+        ));
+
+        // println!("Bodies: {:.4?}", &result);
+
+        // result.append(&mut self.make_distributation(num_bodies_bulge, num_rings_bulge));
+
+        println!("\nMaking bulge bodies...");
+        if num_bodies_bulge > 0 && !self.mass_density_bulge.is_empty() {
+            result.append(&mut make_distrib(
+                &self.mass_density_bulge,
+                &self.rotation_curve_bulge,
+                self.mass_bulge,
+                self.eccentricity,
+                num_bodies_bulge,
+                num_rings_bulge,
+                true,
+            ));
+        }
 
         result
     }
@@ -471,4 +360,183 @@ pub fn mass_density_from_lum(
     // }
 
     mass_density
+}
+
+fn make_distrib(
+    mass_density: &[(f64, f64)],
+    vel: &[(f64, f64)],
+    mass_total: f64,
+    eccentricity: f64,
+    num_bodies: usize,
+    num_rings: usize,
+    three_d: bool,
+) -> Vec<Body> {
+    // fn make_bulge(&self, num_bodies: usize, num_rings: usize) -> Vec<Body> {
+    // todo: DRY between this and disk; consolidate.
+    // todo: maybe combine these into the same fn. Or, combine common code into a helper.
+
+    let mut result = Vec::with_capacity(num_bodies);
+    let mut rng = rand::thread_rng();
+
+    // Note: We are choosing the r range here based on mass density; not velocity.
+    let r_last = mass_density.last().unwrap().0;
+    let dr = r_last / num_rings as f64;
+    let r_all = linspace(mass_density[0].0, r_last, num_rings);
+
+    // println!("Den: {:?}", mass_density);
+
+    let total_area = r_last.powi(2) * TAU / 2.;
+    let total_volume = volume_sphere(r_last);
+
+    let mut mass_sample_total = 0.;
+    for r in &r_all {
+        mass_sample_total += interpolate(mass_density, *r).unwrap();
+    }
+
+    // todo: Experimenting with fixed mass.
+    let mass_per_body = mass_total / num_bodies as f64;
+    println!("Mass per body: {:.6}", mass_per_body);
+
+    let mut n_bodies_by_r = Vec::with_capacity(r_all.len());
+    for r in &r_all {
+        let mass_this_r = interpolate(mass_density, *r).unwrap();
+
+        // todo: we go below and above for this. Check we're not below dr/2?
+        // todo: we go below and above for this. Check we're not below dr/2?
+        // let bodies_this_r = if *r < 1.0e-8 {
+
+        let bodies_this_r = if three_d {
+            if *r < dr / 2. {
+                1
+            } else {
+                let volume_this_r = ring_volume(*r, dr);
+
+                let volume_portion = volume_this_r / total_volume;
+
+                // Trying this: Choose number of bodies based on volume;
+                (volume_portion * mass_this_r) as usize
+
+                // (mass_this_r / volume_this_r) as usize // todo:
+
+                // todo: Experimenting.
+                // (100. * volume_portion * num_bodies as f64) as usize
+            }
+        } else {
+            if *r < 1.0e-8 {
+                1
+            } else {
+                let area_this_r = ring_area(*r, dr);
+
+                let area_portion = area_this_r / total_area;
+                // let mass_portion = mass_this_r / mass_sample_total;
+
+                // Trying this: Choose number of bodies based on area;
+                (area_portion * num_bodies as f64) as usize
+            }
+        };
+
+        // println!("Bodies at r{:.4}: {}", r, bodies_this_r);
+
+        // let bodies_this_r = (mass_portion * num_bodies as f64) as usize;
+
+        // M☉
+        // let mass_per_body_ = if bodies_this_r == 0 {
+        //     0.
+        // } else {
+        //     mass_this_r / bodies_this_r as f64
+        // };
+
+        n_bodies_by_r.push(bodies_this_r);
+    }
+
+    // Normalize body count.
+    let count: usize = n_bodies_by_r.iter().sum();
+
+    for (i, r) in r_all.iter().enumerate() {
+        let bodies_this_r = n_bodies_by_r[i] * num_bodies / count;
+        // todo: Dup with above!
+        let mass_this_r = interpolate(mass_density, *r).unwrap();
+
+        println!(
+            "Bulge. r: {r} N bodies: {:?} rho: {:.4?}, mass per: {:.6?}",
+            // "Bulge. r: {r} N bodies: {:?} rho: {:.4?}, mass per: {:?}",
+            bodies_this_r,
+            mass_this_r,
+            mass_per_body
+        );
+
+        let v_mag = interpolate(vel, *r).unwrap();
+
+        for _ in 0..bodies_this_r {
+            let θ = rng.gen_range(0.0..TAU);
+
+            let (posit, vel) = if three_d {
+                let ϕ = if three_d {
+                    // Random phi for polar angle with area weighting
+                    let u: f64 = rng.gen_range(-1.0..1.0); // Uniform random variable
+                    u.acos() // Inverse cosine for area-preserving sampling
+                } else {
+                    0.
+                };
+
+                // Convert spherical coordinates to Cartesian coordinates
+                let x = r * ϕ.sin() * θ.cos();
+                let y = r * ϕ.sin() * θ.sin();
+                let z = if three_d { r * ϕ.cos() } else { 0. };
+
+                let scale_x = 1.0 - eccentricity; // Eccentricity factor for x-axis
+                let posit = Vec3::new(x * scale_x, y, z);
+
+                // Velocity direction: perpendicular to the radius vector
+                let v_x = θ.sin() * ϕ.cos(); // Velocity component in x-direction
+                let v_y = θ.sin() * ϕ.sin();
+                let v_z = θ.cos();
+                let mut vel = Vec3::new(v_x / scale_x, v_y, v_z);
+
+                // Normalize velocity vector and scale to v_mag
+                let vel = vel.to_normalized() * v_mag;
+
+                (posit, vel)
+            } else {
+                let scale_x = 1.0 - eccentricity; // Eccentricity factor for x-axis
+                let posit = Vec3::new(r * θ.cos() * scale_x, r * θ.sin(), 0.0);
+
+                // Velocity direction: perpendicular to the radius vector
+                let v_x = -v_mag * θ.sin(); // Tangential velocity in x-direction
+                let v_y = v_mag * θ.cos(); // Tangential velocity in y-direction
+
+                let vel = Vec3::new(v_x, v_y, 0.0);
+
+                (posit, vel)
+            };
+
+            result.push(Body {
+                posit,
+                vel,
+                accel: Vec3::new_zero(),
+                mass: mass_per_body,
+            })
+        }
+    }
+
+    let mut mass_sum = 0.;
+    for body in &result {
+        mass_sum += body.mass;
+    }
+
+    let mass_scaler = mass_total / mass_sum;
+    for body in &mut result {
+        body.mass *= mass_scaler;
+    }
+
+    // This loop is just diagnostic.
+    let mut mass_count = 0.;
+    for body in &mut result {
+        mass_count += body.mass;
+    }
+
+    println!("Total bodies {:?}", result.len());
+    println!("Total mass: {:.0?} e9", mass_count / 1e9);
+
+    result
 }
