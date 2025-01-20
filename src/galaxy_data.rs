@@ -21,7 +21,8 @@ struct SparcData {
     pub velocity_disk: Vec<f64>,
     // /// Luminosity brightness profile. r (kpc), mu (mac arcsec^-2) -
     // pub luminosity_disk: Vec<(f64, f64)>,
-    /// X: r (kpc). Y:  M☉ / pc^2. (todo: Why not / kpc^3?)
+    /// X: r (kpc). Y:  M☉ / pc^2. Note: This is only valid on the galactic plane. You must extrapolate
+    /// to get a volume profile; the value you need is in M☉ / kpc^3?
     pub mass_density_bulge: Vec<f64>,
     /// X: r (kpc). Y: km/s
     pub velocity_bulge: Vec<f64>,
@@ -51,19 +52,7 @@ impl SparcData {
             .collect();
 
         // At the disk radius indexies. M☉/pc^2
-        let density_bulge_ = self
-            .mass_density_bulge
-            .iter()
-            .enumerate()
-            .map(|(i, v)| {
-                // todo: Attempting to figure out why the SPARC units for bulge mass density are in
-                // todo: Units of area.
-                // pi r^2 / pi r^3 = 1/r
-                // let divisor = if r[i].abs() < f64::EPSILON { 1.0 } else { r[i] };
-                let divisor = 1.;
-                v * 1e6 / divisor
-            })
-            .collect(); // convert to M☉/kpc^3;
+        let density_bulge_ = self.mass_density_bulge.iter().map(|v| v * 1e6).collect(); // convert to M☉/kpc^3;
 
         // kpc/MYR
         let velocity_bulge = self
@@ -702,8 +691,6 @@ pub fn ngc_2824() -> GalaxyDescrip {
 
     let (mass_density_disk, rotation_curve_disk, mass_density_bulge, rotation_curve_bulge) =
         sparc_data.galaxy_descrip();
-
-    // todo: Mass and rotation for the bulge.
 
     GalaxyDescrip {
         shape: GalaxyShape::Lenticular,
