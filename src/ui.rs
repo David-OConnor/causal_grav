@@ -1,17 +1,17 @@
 use std::{path::PathBuf, str::FromStr};
 
 use barnes_hut::{Cube, Tree};
-use egui::{Color32, Context, RichText, Slider, TopBottomPanel, Ui};
+use egui::{Color32, ComboBox, Context, RichText, Slider, TopBottomPanel, Ui};
 use graphics::{EngineUpdates, Entity, Scene};
 use lin_alg::f32::{Quaternion, Vec3};
 
 use crate::{
     accel::MondFn,
-    body_creation::GalaxyModel,
-    build,
-    playback::{change_snapshot, SnapShot},
-    properties, util, ForceModel, State, BOUNDING_BOX_PAD, SAVE_FILE,
+    BOUNDING_BOX_PAD,
+    build
+    , ForceModel, playback::{change_snapshot, SnapShot}, SAVE_FILE, State, util,
 };
+use crate::galaxy_data::GalaxyModel;
 
 pub const ROW_SPACING: f32 = 10.;
 pub const COL_SPACING: f32 = 30.;
@@ -117,29 +117,35 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
             ui.add_space(COL_SPACING);
 
-            // todo: Combo box for Galaxy model;
-            // todo: Populate this as you add data.
-            for model in [
-                GalaxyModel::Ngc1560,
-                GalaxyModel::Ngc2685,
-                GalaxyModel::Ngc2824,
-            ] {
-                if ui
-                    .radio_value(&mut state.ui.galaxy_model, model, model.to_str())
-                    .changed()
-                {
-                    state.ui.galaxy_descrip = model.descrip();
-                    refresh_bodies = true;
-                };
+            let mut prev_model = state.ui.galaxy_model;
+            ComboBox::from_id_salt(0)
+                .width(120.)
+                .selected_text(state.ui.galaxy_model.to_str())
+                .show_ui(ui, |ui| {
+                    for model in [
+                        GalaxyModel::Ngc1560,
+                        GalaxyModel::Ngc2685,
+                        GalaxyModel::Ngc2824,
+                        GalaxyModel::Ngc3626,
+                        GalaxyModel::Ugc6176,
+                        GalaxyModel::M31,
+                    ] {
+                        ui.selectable_value(&mut state.ui.galaxy_model, model, model.to_str());
+                    }
+                });
+            if prev_model != state.ui.galaxy_model {
+                state.ui.galaxy_descrip = state.ui.galaxy_model.descrip();
+                refresh_bodies = true;
             }
 
             ui.add_space(COL_SPACING);
 
             ui.checkbox(&mut state.ui.add_halo, "Add halo");
         });
-        ui.horizontal(|ui| {
-            ui.add_space(ROW_SPACING);
 
+        ui.add_space(ROW_SPACING);
+
+        ui.horizontal(|ui| {
             ui.label("dt:");
             ui.add_sized(
                 [60., Ui::available_height(ui)],
@@ -170,9 +176,22 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 [40., Ui::available_height(ui)],
                 egui::TextEdit::singleline(&mut state.ui.θ_input),
             );
+
             if ui.button("Save θ").clicked() {
                 if let Ok(v) = state.ui.θ_input.parse() {
                     state.config.bh_config.θ = v;
+                }
+            }
+
+            ui.label("v scaler:");
+            ui.add_sized(
+                [36., Ui::available_height(ui)],
+                egui::TextEdit::singleline(&mut state.ui.v_scaler_input),
+            );
+            if ui.button("Save v scaler").clicked() {
+                if let Ok(v) = state.ui.v_scaler_input.parse() {
+                    state.config.v_scaler = v;
+                    refresh_bodies = true; // For updated v.
                 }
             }
 

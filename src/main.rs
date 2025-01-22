@@ -13,13 +13,13 @@ use bincode::{Decode, Encode};
 use lin_alg::f64::Vec3;
 use rand::Rng;
 use rayon::prelude::*;
-
+use galaxy_data::GalaxyModel;
 use crate::{
     accel::{acc_newton_inner_with_mond, MondFn},
-    body_creation::{GalaxyDescrip, GalaxyModel},
+    body_creation::GalaxyDescrip,
     gaussian::{COEFF_C, MAX_SHELL_R},
     integrate::integrate_rk4,
-    playback::{vec3_to_f32, GravShellSnapshot, SnapShot},
+    playback::{GravShellSnapshot, SnapShot, vec3_to_f32},
     render::render,
     units::{A0_MOND, C},
 };
@@ -95,11 +95,13 @@ pub struct Config {
     num_bodies_disk: usize, // todo: You may, in the future, not make this a constant.
     num_bodies_bulge: usize, // todo: You may, in the future, not make this a constant.
     /// When placing bodies.
-    num_rings_disk: usize, // todo: You may, in the future, not make this a constant.
-    num_rings_bulge: usize, // todo: You may, in the future, not make this a constant.
+    // num_rings_disk: usize, // todo: You may, in the future, not make this a constant.
+    // num_rings_bulge: usize, // todo: You may, in the future, not make this a constant.
     softening_factor_sq: f64,
     snapshot_ratio: usize,
     bh_config: BhConfig,
+    /// Experimental tool; scale all published V magnitudes by this.
+    v_scaler: f64,
 }
 
 impl Default for Config {
@@ -112,7 +114,7 @@ impl Default for Config {
         // In distance: t * d/t = d.
         let shell_spacing = dt * shell_creation_ratio as f64 * C;
 
-        let num_bodies_disk = 300;
+        let num_bodies_disk = 600;
         let num_bodies_bulge = 100;
 
         Self {
@@ -125,15 +127,16 @@ impl Default for Config {
             // num_rays_per_iter: 200,
             gauss_c: shell_spacing * COEFF_C,
             num_bodies_disk,
-            num_rings_disk: 0, // Set later
+            // num_rings_disk: 0, // Set later
             num_bodies_bulge,
-            num_rings_bulge: 0, // Set later
+            // num_rings_bulge: 0, // Set later
             softening_factor_sq: 0.01,
             snapshot_ratio: 4,
             bh_config: BhConfig {
                 // θ: 0.4,
                 ..Default::default()
             },
+            v_scaler: 1.0
         }
     }
 }
@@ -160,6 +163,7 @@ pub struct StateUi {
     /// We include text input fields for user-typeable floats. Not required for int.
     dt_input: String,
     θ_input: String,
+    v_scaler_input: String,
     // num_timesteps_input: String,
     add_halo: bool, // todo: A/R
     galaxy_model: GalaxyModel,
@@ -177,6 +181,7 @@ impl Default for StateUi {
             building: Default::default(),
             dt_input: Default::default(),
             θ_input: Default::default(),
+            v_scaler_input: Default::default(),
             add_halo: Default::default(),
             galaxy_model,
             galaxy_descrip: galaxy_model.descrip(),
@@ -199,15 +204,10 @@ struct State {
 
 impl State {
     fn refresh_bodies(&mut self) {
-        // todo: We don't need to change rings for all cases of `redraw_bodies`, but this is harmless
-        self.config.num_rings_disk = self.config.num_bodies_disk / DISK_RING_PORTION;
-        self.config.num_rings_bulge = self.config.num_bodies_bulge / BULGE_RING_PORTION;
-
         self.bodies = self.ui.galaxy_descrip.make_bodies(
             self.config.num_bodies_disk,
-            self.config.num_rings_disk,
             self.config.num_bodies_bulge,
-            self.config.num_rings_bulge,
+            self.config.v_scaler,
         );
         self.body_masses = self.bodies.iter().map(|b| b.mass as f32).collect();
 
@@ -350,6 +350,7 @@ fn build(state: &mut State, force_model: ForceModel) {
     );
 
     let mut start_time_tree = Instant::now();
+    let mut tree_time = 0;
     let mut start_time_integ = Instant::now();
 
     let mut bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
@@ -404,12 +405,7 @@ fn build(state: &mut State, force_model: ForceModel) {
         }
 
         if t % BENCH_RATIO == 0 {
-            println!(
-                "t: {}k, Tree time: {}μs Tree size: {}",
-                t / 1_000,
-                start_time_tree.elapsed().as_micros(),
-                tree.as_ref().unwrap().nodes.len()
-            );
+            tree_time = start_time_tree.elapsed().as_micros();
         }
 
         // Benchmarking, 100k bodies, 2025-01-16, theta = 0.4, BH algo.
@@ -473,19 +469,28 @@ fn build(state: &mut State, force_model: ForceModel) {
                 }
             };
 
+            // todo: COme back to skiping the first body. Setting the central body as immovable for now.
+            // todo: While we have a central body...
             // Iterate, in parallel, over target bodies. The loop over source bodies, per target, is handled
             // by the acceleration function.
             state
                 .bodies
                 .par_iter_mut()
                 .enumerate()
+                .skip(1) // Skip the central body
                 .for_each(|(id_target, body_target)| {
                     integrate_rk4(body_target, id_target, &acc, dt);
                 });
         }
 
         if t % BENCH_RATIO == 0 {
-            println!("Integ time: {}μs", start_time_integ.elapsed().as_micros());
+            println!(
+                "t: {}k, Tree time: {}μs Tree size: {} Integ time: {}μs",
+                t / 1_000,
+                tree_time,
+                tree.as_ref().unwrap().nodes.len(),
+                start_time_integ.elapsed().as_micros()
+            );
         }
 
         // Save the current state to a snapshot, for later playback.
@@ -506,6 +511,7 @@ fn main() {
 
     state.ui.dt_input = state.config.dt.to_string();
     state.ui.θ_input = state.config.bh_config.θ.to_string();
+    state.ui.v_scaler_input = state.config.v_scaler.to_string();
 
     state.refresh_bodies();
 

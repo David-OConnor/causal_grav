@@ -3,12 +3,64 @@
 //! [SPARC](http://astroweb.cwru.edu/SPARC/) has tabular .dat data files of mass density and rotation curves.
 
 use crate::{
-    body_creation::{mass_density_from_lum, GalaxyDescrip, GalaxyShape},
-    properties::mass_density,
+    body_creation::{GalaxyDescrip, GalaxyShape, mass_density_from_lum},
     units::{ARCSEC_CONV_FACTOR, KPC_MYR_PER_KM_S},
     util::{scale_x_axis, zip_data},
 };
 // todo: Method to auto-parse from SPARC etc Rotmod dat files?
+
+/// todo: Move specific galaxy creation to its own module A/R
+#[derive(Clone, Copy, PartialEq, Default)]
+pub enum GalaxyModel {
+    #[default]
+    Ngc1560,
+    Ngc3198,
+    Ngc3115,
+    Ngc3031,
+    Ngc7331,
+    Ngc2685,
+    Ngc2824,
+    Ngc3626,
+    Ugc6176,
+    M31,
+}
+
+impl GalaxyModel {
+    pub fn to_str(&self) -> String {
+        match self {
+            Self::Ngc1560 => "NGC 1560",
+            Self::Ngc3198 => "NGC 3198",
+            Self::Ngc3115 => "NGC 3115",
+            Self::Ngc3031 => "NGC 3031",
+            Self::Ngc7331 => "NGC 7331",
+            Self::Ngc2685 => "NGC 2685",
+            Self::Ngc2824 => "NGC 2824", // Shelest paper
+            Self::Ngc3626 => "NGC 3626", // Shelest paper
+            Self::Ugc6176 => "UGC 6176", // Shlest paper
+            Self::M31 => "M31-NGC 224", // Andromeda
+        }
+            .to_owned()
+    }
+
+    pub fn descrip(&self) -> GalaxyDescrip {
+        match self {
+            /// Ludwig, Figures 3 and 5. todo: Partial/rough
+            Self::Ngc1560 => ngc_1560(),
+            Self::Ngc3198 => ngc_3198(),
+            Self::Ngc3115 => ngc_3115(),
+            Self::Ngc2685 => ngc_2685(),
+            Self::Ngc2824 => ngc_2824(),
+            Self::Ngc3626 => ngc_3636(),
+            Self::Ugc6176 => ugc_6176(),
+            Self::M31 => m31(),
+            _ => unimplemented!(), // todo
+        }
+    }
+
+    // pub fn make_bodies(&self, num_bodies_disk: usize, num_rings_disk: usize, num_bodies_disk: usize, num_rings_disk: usize,) -> Vec<Body> {
+    //     self.descrip().make_bodies(num_bodies, num_rings)
+    // }
+}
 
 /// A subset of GalaxyDescrip, from SPARC .dat file data. In units provided by SPARC, which
 /// are not the same units we use internally.
@@ -687,6 +739,236 @@ pub fn ngc_2824() -> GalaxyDescrip {
         velocity_bulge: velocity_bulge_,
         mass_disk: 31.1825e9,
         mass_bulge: 8.3897e9,
+    };
+
+    let (mass_density_disk, rotation_curve_disk, mass_density_bulge, rotation_curve_bulge) =
+        sparc_data.galaxy_descrip();
+
+    GalaxyDescrip {
+        shape: GalaxyShape::Lenticular,
+        mass_density_disk,
+        rotation_curve_disk,
+        luminosity_disk: vec![], // todo
+        mass_density_bulge,
+        rotation_curve_bulge,
+        luminosity_bulge: vec![], // todo
+        eccentricity: 0.,         // todo
+        arm_count: 0,             // todo
+        burkert_params: (0., 0.), // todo
+        r_s: 0.,                  // todo
+        mass_disk: sparc_data.mass_disk,
+        mass_bulge: sparc_data.mass_bulge,
+        mass_to_light_ratio: 0., // todo
+        dist_from_earth: 0.,     // Not sure.
+    }
+}
+
+// todo: Fill out
+pub fn m31() -> GalaxyDescrip {
+    let radius = vec![];
+
+    // M☉/pc^2
+    let density_disk_ = vec![];
+
+    // At the disk radius indexies. km/s
+    let velocity_disk_ = vec![];
+
+    // M☉/pc^2
+    let density_bulge_ = vec![];
+
+    // km/s
+    let velocity_bulge_ = vec![];
+
+    let sparc_data = SparcData {
+        r: radius,
+        mass_density_disk: density_disk_,
+        velocity_disk: velocity_disk_,
+        mass_density_bulge: density_bulge_,
+        velocity_bulge: velocity_bulge_,
+        mass_disk: 31.1825e9,
+        mass_bulge: 8.3897e9,
+    };
+
+    let (mass_density_disk, rotation_curve_disk, mass_density_bulge, rotation_curve_bulge) =
+        sparc_data.galaxy_descrip();
+
+    GalaxyDescrip {
+        shape: GalaxyShape::Lenticular,
+        mass_density_disk,
+        rotation_curve_disk,
+        luminosity_disk: vec![], // todo
+        mass_density_bulge,
+        rotation_curve_bulge,
+        luminosity_bulge: vec![], // todo
+        eccentricity: 0.,         // todo
+        arm_count: 0,             // todo
+        burkert_params: (0., 0.), // todo
+        r_s: 0.,                  // todo
+        mass_disk: sparc_data.mass_disk,
+        mass_bulge: sparc_data.mass_bulge,
+        mass_to_light_ratio: 0., // todo
+        dist_from_earth: 0.,     // Not sure.
+    }
+}
+
+// todo: Fill out
+/// From SPARC, and paper
+pub fn ngc_3636() -> GalaxyDescrip {
+    let radius = vec![
+        0.00000, 0.07216, 0.07994, 0.08771, 0.09659, 0.10658, 0.11657, 0.12879, 0.14100, 0.15543,
+        0.17097, 0.18763, 0.20650, 0.22760, 0.24980, 0.27534, 0.30309, 0.33307, 0.36637, 0.40301,
+        0.44298, 0.48739, 0.53624, 0.58953, 0.64948, 0.71387, 0.78493, 0.86375, 0.95035, 1.04583,
+        1.15019, 1.26454, 1.39111, 1.52989, 1.68310, 1.85185, 2.03726, 2.24043, 2.46470, 2.71117,
+        2.98206, 3.28071, 3.60823, 3.96905, 4.36651, 4.80283, 5.28355, 5.81202, 6.39267, 7.03215,
+        7.73604, 8.50875, 9.36029, 10.29621, 11.32539, 12.45782, 13.70349, 15.07461, 16.58230,
+        18.23986,
+    ];
+
+    // M☉/pc^2
+    let density_disk_ = vec![
+        1976.40336, 1923.06796, 1917.41069, 1911.77007, 1905.34395, 1898.14040, 1890.96407,
+        1882.22984, 1873.53595, 1863.31312, 1852.36628, 1840.70889, 1827.58584, 1813.02958,
+        1797.83244, 1780.51314, 1761.87700, 1741.96900, 1720.11271, 1696.38740, 1670.87830,
+        1642.98449, 1612.83884, 1580.58315, 1545.06594, 1507.80630, 1467.73411, 1424.52387,
+        1378.51847, 1329.51480, 1277.94302, 1223.72759, 1166.39968, 1094.73185, 1038.33195,
+        991.10077, 904.99363, 800.70140, 690.35883, 559.59716, 453.60264, 368.36264, 293.95143,
+        231.56642, 189.44170, 154.41006, 116.59384, 83.15255, 58.43534, 49.05413, 41.25490,
+        29.31403, 23.26353, 17.61471, 13.59802, 8.68312, 5.39853, 2.66119, 1.91900, 0.83922,
+    ];
+
+    // At the disk radius indexies. km/s
+    let velocity_disk_ = vec![
+        0.000000, 9.833079, 10.870669, 11.901031, 13.071282, 14.378063, 15.674886, 17.247795,
+        18.804476, 20.626984, 22.570611, 24.631977, 26.940055, 29.485366, 32.122622, 35.104202,
+        38.296060, 41.682904, 45.364003, 49.342064, 53.598720, 58.191988, 63.124232, 68.338247,
+        74.075058, 80.007684, 86.349486, 93.116151, 100.279133, 107.863446, 115.779528,
+        124.080218, 132.876313, 141.857920, 151.035739, 161.445752, 172.849141, 183.414661,
+        192.704414, 199.754085, 203.297757, 204.979085, 205.271037, 203.685342, 201.025874,
+        198.796267, 196.223946, 191.499709, 184.400383, 176.639563, 171.300876, 166.267545,
+        159.697726, 154.141116, 148.706218, 143.506151, 137.121326, 130.369985, 123.351035,
+        118.086839,
+    ];
+
+    // M☉/pc^2
+    let density_bulge_ = vec![
+        68628.50634, 68628.50634, 66423.43908, 64286.61643, 61916.83667, 59574.53437, 57094.99441,
+        54081.14089, 50473.91952, 46821.85189, 43379.37337, 38844.84654, 34240.46060, 29845.07327,
+        26323.59338, 22475.73430, 19081.80530, 16203.81633, 12938.82242, 10551.93825, 8645.35359,
+        6901.69597, 5213.48420, 3932.44190, 2917.67431, 2149.67731, 1641.42443, 1179.78967,
+        855.69300, 561.28383, 334.08879, 152.65729, 46.26051, 12.49315, 2.94446, 0.59933,
+        0.10425, 0.01534, 0.00185, 0.00018, 0.00002, 0.00000, 0.00000, 0.00000, 0.00000,
+        0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+        0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,];
+
+    // km/s
+    let velocity_bulge_ = vec![
+        0.000000, 114.569865, 130.417300, 145.114151, 159.809702, 175.233893, 189.386936,
+        206.006674, 221.301723, 237.263683, 253.234833, 268.917507, 283.770990, 295.877263,
+        306.345735, 316.659999, 324.776489, 331.162745, 337.497005, 340.898969, 341.208815,
+        340.317195, 339.328442, 335.958417, 330.391159, 324.001759, 316.146018, 308.113147,
+        299.411775, 290.357793, 280.892678, 270.810973, 259.920976, 248.315467, 236.915804,
+        225.975411, 215.454260, 205.415586, 195.808481, 186.670890, 177.962590, 169.669189,
+        161.785576, 154.256553, 147.068505, 140.229149, 133.697718, 127.474511, 121.547425,
+        115.889168, 110.491165, 105.354727, 100.448222, 95.774129, 91.318827, 87.069466,
+        83.017818, 79.152359, 75.468292, 71.957515,
+    ];
+
+    let sparc_data = SparcData {
+        r: radius,
+        mass_density_disk: density_disk_,
+        velocity_disk: velocity_disk_,
+        mass_density_bulge: density_bulge_,
+        velocity_bulge: velocity_bulge_,
+        mass_disk: 52.7180e9,
+        mass_bulge: 21.9047e9,
+    };
+
+    let (mass_density_disk, rotation_curve_disk, mass_density_bulge, rotation_curve_bulge) =
+        sparc_data.galaxy_descrip();
+
+    GalaxyDescrip {
+        shape: GalaxyShape::Lenticular, // todo
+        mass_density_disk,
+        rotation_curve_disk,
+        luminosity_disk: vec![], // todo
+        mass_density_bulge,
+        rotation_curve_bulge,
+        luminosity_bulge: vec![], // todo
+        eccentricity: 0.,         // todo
+        arm_count: 0,             // todo
+        burkert_params: (0., 0.), // todo
+        r_s: 0.,                  // todo
+        mass_disk: sparc_data.mass_disk,
+        mass_bulge: sparc_data.mass_bulge,
+        mass_to_light_ratio: 0., // todo
+        dist_from_earth: 0.,     // Not sure.
+    }
+}
+
+// todo: Fill out
+pub fn ugc_6176() -> GalaxyDescrip {
+    let radius = vec![
+        0.00000, 0.12385, 0.13718, 0.15052, 0.16576, 0.18291, 0.20006, 0.22102, 0.24198, 0.26674,
+        0.29342, 0.32200, 0.35439, 0.39059, 0.42870, 0.47252, 0.52015, 0.57160, 0.62875, 0.69163,
+        0.76022, 0.83643, 0.92027, 1.01172, 1.11461, 1.22512, 1.34706, 1.48234, 1.63095, 1.79481,
+        1.97391, 2.17016, 2.38736, 2.62553, 2.88846, 3.17807, 3.49626, 3.84493, 4.22981, 4.65279,
+        5.11768, 5.63021, 6.19228, 6.81151, 7.49361, 8.24240, 9.06741, 9.97434, 10.97082, 12.06828,
+        13.27625,
+    ];
+
+    // M☉/pc^2
+    let density_disk_ = vec![
+        4510.40087, 3817.97191, 3750.05553, 3683.34730, 3608.56112, 3526.24014, 3445.79713,
+        3349.96580, 3256.79965, 3150.02905, 3038.95662, 2924.29288, 2799.56195, 2666.44203,
+        2533.14840, 2388.07738, 2239.79879, 2089.98161, 1935.24162, 1778.22701, 1608.69851,
+        1439.30903, 1304.35081, 1172.16506, 1014.75891, 868.84963, 732.82096, 606.19384, 493.19026,
+        392.83940, 313.77268, 240.66622, 192.58175, 155.24411, 129.00756, 110.41171, 100.32638,
+        91.58306, 84.60872, 65.61682, 50.60753, 36.62816, 23.19611, 15.28323, 10.70077, 7.27470,
+        4.47317, 2.51082, 1.53821, 1.01162, 0.41325,
+    ];
+
+    // At the disk radius indexies. km/s
+    let velocity_disk_ = vec![
+        0.000000, 33.877963, 37.112867, 40.278384, 43.813323, 47.686778, 51.455444, 55.918653,
+        60.226403, 65.128268, 70.204495, 75.417094, 81.049706, 86.976212, 92.882054, 99.244169,
+        105.668078, 112.074487, 118.590959, 125.093021, 131.370656, 137.271110, 142.876922,
+        148.526649, 153.980662, 158.413294, 161.963867, 164.534078, 165.962947, 166.142473,
+        165.160235, 163.011767, 159.444175, 155.527053, 151.186997, 146.860160, 143.075042,
+        140.539389, 139.521069, 139.346424, 137.310678, 134.740138, 130.784647, 125.108250,
+        119.454212, 114.204857, 108.966315, 103.488531, 98.026380, 93.108608, 88.763872,
+    ];
+
+    // M☉/pc^2
+    let density_bulge_ = vec![
+        17558.88885, 17558.88885, 17112.23442, 16476.87729, 15665.89842, 14704.51322,
+        13745.19616, 12785.28093, 11512.53583, 10385.02567, 9031.23957, 7694.87133,
+        6210.34791, 5067.65689, 3723.31146, 2547.43712, 1607.43208, 889.97162, 440.57540,
+        195.28228, 80.38629, 29.98265, 10.13274, 3.10279, 0.81946, 0.19610, 0.04047, 0.00703,
+        0.00103, 0.00013, 0.00001, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+        0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+        0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+    ];
+
+    // km/s
+    let velocity_bulge_ = vec![
+        0.000000, 81.710823, 93.364608, 104.373964, 115.855284, 127.719002, 138.287674,
+        149.738838, 160.663448, 171.392185, 182.111633, 191.960778, 200.137109, 206.841095,
+        211.675565, 215.795167, 215.976056, 213.631785, 208.581629, 201.678924, 194.484106,
+        185.361991, 178.230888, 169.341827, 160.993517, 153.619877, 146.510294, 139.687622,
+        133.142175, 126.842946, 121.001574, 115.400799, 110.026105, 104.917082, 100.027984,
+        95.361476, 90.918620, 86.698279, 82.659784, 78.813020, 75.148122, 71.646074,
+        68.317097, 65.137786, 62.102510, 59.214471, 56.456385, 53.828541, 51.325732,
+        48.936399, 46.657019,
+    ];
+
+    let sparc_data = SparcData {
+        r: radius,
+        mass_density_disk: density_disk_,
+        velocity_disk: velocity_disk_,
+        mass_density_bulge: density_bulge_,
+        velocity_bulge: velocity_bulge_,
+        mass_disk: 22.2694e9,
+        mass_bulge: 6.7031e9,
     };
 
     let (mass_density_disk, rotation_curve_disk, mass_density_bulge, rotation_curve_bulge) =
