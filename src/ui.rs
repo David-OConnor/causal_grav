@@ -242,14 +242,15 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 for leaf in leaves {
                     let c = leaf.bounding_box.center;
                     let posit =
-                        Vec3::new(c.x as f32, c.y as f32, c.z as f32) + Vec3::new(0., 0., 1.5);
+                        // Vec3::new(c.x as f32, c.y as f32, c.z as f32) + Vec3::new(0., 0., 1.5);
+                        Vec3::new(c.x as f32, c.y as f32, c.z as f32);
 
                     scene.entities.push(Entity::new(
                         1,
                         posit,
                         Quaternion::new_identity(),
                         leaf.bounding_box.width as f32 * 0.85,
-                        (50., 100., 255.),
+                        (50., 200., 220.),
                         1.,
                     ));
                 }

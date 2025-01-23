@@ -69,6 +69,10 @@ pub fn mass_density(bodies: &[Body], center: Vec3) -> Vec<(f64, f64)> {
         }
     }
 
+    if result.is_empty() {
+        eprintln!("Error calculating mass density: Result is empty");
+        return Vec::new();
+    }
     let rho_0 = result[0].1;
 
     // Normalize to the central mass density.

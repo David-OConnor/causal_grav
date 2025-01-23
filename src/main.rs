@@ -40,8 +40,11 @@ mod render;
 mod ui;
 mod units;
 mod util;
-// mod fmm_gadget4;
-// mod fmm_py;
+
+
+// todo: Try a Galaxy filament simulation; large scale CDM theory. Can we get filaments without CDM?
+// todo: - try an earth-perspective visualization and analysis. From the perspective of earth, validate these
+// todo galaxies vs the images we get.
 
 // Shower thought, from looking at this from a first person view: View things from the body's perspective.
 // Can you make of it something like that?
@@ -51,11 +54,6 @@ mod util;
 
 // todo: Next, try having the electrons add up to more than 1 charge.
 // todo: Try to quantify the elec density, so you can compare it to Schrodinger.
-
-// todo: Soften gravity at short distances to prevent unstability?
-// todo: F = G*m1*m2/(R^2 + eps^2)
-
-// todo: Try adaptive time-steps, i.e. tighter steps whenever bodies get close to each other.
 
 // todo: Use soft masses:  Bodies get a finite radius. Use plummer or hernquist potentials. (Similar to force softening?)
 
@@ -127,10 +125,9 @@ impl Default for Config {
             // num_rays_per_iter: 200,
             gauss_c: shell_spacing * COEFF_C,
             num_bodies_disk,
-            // num_rings_disk: 0, // Set later
             num_bodies_bulge,
-            // num_rings_bulge: 0, // Set later
-            softening_factor_sq: 0.01,
+            softening_factor_sq: 0.0001,
+            // softening_factor_sq: 0.05,
             snapshot_ratio: 4,
             bh_config: BhConfig {
                 // θ: 0.4,
@@ -142,7 +139,7 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Load the config.
+    /// Load the config.w
     pub fn load(&mut self, path: &Path) -> io::Result<Self> {
         util::load(path)
     }
@@ -507,6 +504,7 @@ fn main() {
     let mut state = State::default();
     if let Ok(cfg) = util::load(&PathBuf::from_str(SAVE_FILE).unwrap()) {
         state.config = cfg;
+        println!("V scaler loaded: {:?}", state.config.v_scaler);
     }
 
     state.ui.dt_input = state.config.dt.to_string();

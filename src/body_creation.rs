@@ -5,37 +5,10 @@
 use std::f64::consts::TAU;
 
 use lin_alg::{f64::Vec3, linspace};
+use lin_alg::f64::Quaternion;
 use rand::Rng;
 use rand::rngs::ThreadRng;
 use crate::{Body, DISK_RING_PORTION, util::{interpolate, volume_sphere}};
-
-// /// Create n bodies, in circular orbit, at equal distances from each other.
-// pub fn make_bodies_balanced(num: usize, r: f64, mass_body: f64, mass_central: f64) -> Vec<Body> {
-//     let mut result = Vec::with_capacity(num);
-//
-//     for i in 0..num {
-//         let θ = TAU / num as f64 * i as f64;
-//         let posit = Vec3::new(r * θ.cos(), r * θ.sin(), 0.0);
-//
-//         // Velocity magnitude for circular orbit
-//         let v_mag = (mass_central / r).sqrt();
-//
-//         // Velocity direction: perpendicular to the radius vector
-//         let v_x = -v_mag * θ.sin(); // Tangential velocity in x-direction
-//         let v_y = v_mag * θ.cos(); // Tangential velocity in y-direction
-//
-//         let vel = Vec3::new(v_x, v_y, 0.0);
-//
-//         result.push(Body {
-//             posit,
-//             vel,
-//             accel: Vec3::new_zero(),
-//             mass: mass_body,
-//         });
-//     }
-//
-//     result
-// }
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum GalaxyShape {
@@ -114,8 +87,6 @@ impl GalaxyDescrip {
     ) -> Vec<Body> {
         let mut result = Vec::with_capacity(num_bodies_disk + num_bodies_bulge);
 
-
-
         // result.append(&mut self.make_disk(num_bodies_disk, num_rings_disk));
         println!("\nMaking disk bodies...");
         result.append(&mut make_distrib_data_area(
@@ -140,8 +111,7 @@ impl GalaxyDescrip {
                 self.mass_bulge,
                 self.eccentricity,
                 num_bodies_bulge,
-                // true,
-                false, // todo temp
+                true,
                 v_scaler,
             ));
         }
@@ -324,29 +294,40 @@ fn create_body(r: f64, mass: f64, v_mag: f64, eccentricity: f64, three_d: bool, 
         // Convert spherical coordinates to Cartesian coordinates
         let x = r * ϕ.sin() * θ.cos();
         let y = r * ϕ.sin() * θ.sin();
-        let z = if three_d { r * ϕ.cos() } else { 0. };
+        let z = r * ϕ.cos();
+
+        // todo: Update this logic to make the mass density sufficiently 3d?
 
         let scale_x = 1.0 - eccentricity; // Eccentricity factor for x-axis
-        let posit = Vec3::new(x * scale_x, y, z);
+        // let posit = Vec3::new(x * scale_x, y, z);
+        // todo: Put eccentricity back.
+        let posit = Vec3::new(x, y, z);
 
         // Velocity direction: perpendicular to the radius vector
-        let v_x = θ.sin() * ϕ.cos(); // Velocity component in x-direction
-        let v_y = θ.sin() * ϕ.sin();
-        let v_z = θ.cos();
-        let mut vel = Vec3::new(v_x / scale_x, v_y, v_z);
 
-        // Normalize velocity vector and scale to v_mag
-        let vel = vel.to_normalized() * v_mag;
+        // Rotate along an arbitrary axis perpendicular to the center.
+        let rot_axis = posit.to_normalized();
+        let rotator = Quaternion::from_axis_angle(rot_axis, rng.gen_range(0.0..TAU));
+
+        // Create a unit vector perpendicular to the position.
+        let starting_pt = Vec3::new(1., 0., 0.);
+        let perp_vec = starting_pt.cross(rot_axis);
+        let vel = rotator.rotate_vec(perp_vec).to_normalized() * v_mag;
+
+        // todo: Put eccentricity in velocity back.
 
         (posit, vel)
     } else {
         let x = r * θ.cos();
         let y = r * θ.sin();
 
-        let scale_x = 1.0 - eccentricity; // Eccentricity factor for x-axis
-        let posit = Vec3::new(x * scale_x, y, 0.);
+        // todo: Temp mesasure for a finite-thick disk.
+        let disk_thickness_div2 = 0.2;
+        let z = rng.gen_range(-disk_thickness_div2..disk_thickness_div2);
 
-        // todo: Likely not correct.
+        let scale_x = 1.0 - eccentricity; // Eccentricity factor for x-axis
+        let posit = Vec3::new(x * scale_x, y, z);
+
         // Velocity direction: perpendicular to the radius vector
         let v_x = -v_mag * θ.sin(); // Tangential velocity in x-direction
         let v_y = v_mag * θ.cos(); // Tangential velocity in y-direction
@@ -387,7 +368,8 @@ fn make_distrib_data_area(
     // let (bodies_by_r, mass_per_body_by_r) = select_num_bodies(&r_all, dr, mass_density, num_bodies);
 
     // We will model the inner most area by a single body, to minimize chaotic effects.
-    let rings_in_center = 30; // todo Crude metric that depends on the data. Starting point.
+    // let rings_in_center = 30; // todo Crude metric that depends on the data. Starting point.
+    let rings_in_center = 1; // todo Crude metric that depends on the data. Starting point.
 
     // todo: This is fuzzy, since we don't have a total-mass-in-region estimate.
 
@@ -401,12 +383,14 @@ fn make_distrib_data_area(
         // todo: This averages the mass density of the inner rings. Is this what we want?
         let mass_center =  mass_density_center / rings_in_center as f64 * area_center;
 
-        result.push(Body {
-            posit: Vec3::new_zero(),
-            vel: Vec3::new_zero(),
-            accel: Vec3::new_zero(),
-            mass: mass_center,
-        });
+        // todo: Temp rm.
+
+        // result.push(Body {
+        //     posit: Vec3::new_zero(),
+        //     vel: Vec3::new_zero(),
+        //     accel: Vec3::new_zero(),
+        //     mass: mass_center,
+        // });
     }
 
     // Create bands of masses centered on each r.
@@ -414,8 +398,15 @@ fn make_distrib_data_area(
         if i < rings_in_center { // instead of indexing 1.., this keeps i in sync.
             continue
         }
-        let r_inner = mass_density[i - 1].0;
-        let r_outer = mass_density[i + 1].0;
+        let r_prev = mass_density[i - 1].0;
+        let r_this = mass_density[i].0;
+        let r_next = mass_density[i + 1].0;
+
+        let dr_prev = r_this - r_prev;
+        let dr_next = r_next - r_this;
+
+        let r_inner = r_this - dr_prev/2.;
+        let r_outer = r_this + dr_next/2.;
 
         let area = {
             let area_outer = r_outer.powi(2) * TAU / 2.;
@@ -428,7 +419,8 @@ fn make_distrib_data_area(
         // Set mass proportionally to initial body numbers. This line multiplies mass/area x area.
         let mass_this_area = mass * area;
 
-        let body_num_this_area = 20; // todo temp.
+        // todo temp: Even distribution.
+        let body_num_this_area = num_bodies / (mass_density.len() - rings_in_center);
 
         let mass_per_body = mass_this_area / body_num_this_area as f64;
 
@@ -437,10 +429,10 @@ fn make_distrib_data_area(
             body_num_this_area, mass_per_body/1000., mass_this_area
         );
 
-        let r_body = rng.gen_range(r_inner..r_outer);
-        let v_mag = interpolate(vel, *r).unwrap() * v_scaler;
-
         for _ in 0..body_num_this_area {
+            let r_body = rng.gen_range(r_inner..r_outer);
+            let v_mag = interpolate(vel, r_body).unwrap() * v_scaler;
+
             result.push(create_body(r_body, mass_per_body, v_mag, eccentricity, three_d, &mut rng));
         }
     }
