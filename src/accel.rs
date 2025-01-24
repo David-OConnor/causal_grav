@@ -67,13 +67,6 @@ pub fn calc_acc_shell(
             continue;
         }
 
-        let gauss = GaussianShell {
-            center: shell.center,
-            radius: shell.radius,
-            a: 1., // Keep at one; we handle magnitude below.
-            c: shell_c,
-        };
-
         let acc_diff = shell.center - posit;
         let dist = acc_diff.magnitude();
         let acc_dir = acc_diff / dist; // Unit vec
@@ -84,7 +77,7 @@ pub fn calc_acc_shell(
 
         result += acc_newton_inner(
             acc_dir,
-            shell.src_mass * gauss.value(posit),
+            shell.value(posit, shell_c),
             dist,
             softening_factor_sq,
         );

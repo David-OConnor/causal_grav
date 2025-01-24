@@ -7,7 +7,7 @@ use std::{
     io::{ErrorKind, Read, Write},
     path::Path,
 };
-
+use barnes_hut::{Cube, Node};
 use bincode::{
     config,
     error::{DecodeError, EncodeError},
@@ -15,7 +15,7 @@ use bincode::{
 };
 use graphics::Entity;
 use lin_alg::{
-    f32::{Quaternion, Vec3 as Vec3f32_b},
+    f32::{Quaternion, Vec3 as Vec3f32},
     f64::Vec3,
 };
 
@@ -25,14 +25,7 @@ use crate::{
     },
     GravShell,
 };
-
-/// We use a custom type, vice from lin_alg, so we can impl Encode and Decode.
-#[derive(Clone, Copy, Debug, Encode, Decode)]
-pub struct Vec3f32 {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-}
+use crate::render::{MESH_CUBE, MESH_SPHERE, TREE_COLOR, TREE_CUBE_SCALE_FACTOR, TREE_SHINYNESS};
 
 #[derive(Debug, Encode, Decode)]
 /// A compact version
@@ -67,6 +60,7 @@ pub struct SnapShot {
     // todo: Compact form for shells, as above?
     pub shells: Vec<GravShellSnapshot>,
     pub dt: f32,
+    pub tree_cubes: Vec<Cube> // todo: Custom type type f32, as above.
 }
 
 pub fn vec3_to_f32(v: Vec3) -> Vec3f32 {
@@ -79,11 +73,11 @@ pub fn vec3_to_f32(v: Vec3) -> Vec3f32 {
 
 /// Body masses are separate from the snapshot, since it's invariant.
 pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_masses: &[f32]) {
-    // *entities = Vec::with_capacity(entities.len() + snapshot.rays.len());
-    *entities = Vec::with_capacity(entities.len());
+    // todo: Shells A/R
+    *entities = Vec::with_capacity(snapshot.body_posits.len() + snapshot.tree_cubes.len());
 
     for (i, body_posit_) in snapshot.body_posits.iter().enumerate() {
-        let body_posit = Vec3f32_b::new(body_posit_.x, body_posit_.y, body_posit_.z);
+        let body_posit = Vec3f32::new(body_posit_.x, body_posit_.y, body_posit_.z);
         // println!("Body mass: {:?}. Scaled size: {:?}", body_masses[i], BODY_SIZE_SCALER * body_masses[i]);
 
         let entity_size = f32::clamp(
@@ -92,12 +86,23 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
             BODY_SIZE_MAX,
         );
         entities.push(Entity::new(
-            0,
+            MESH_SPHERE,
             body_posit,
             Quaternion::new_identity(),
             entity_size,
             BODY_COLOR,
             BODY_SHINYNESS,
+        ));
+    }
+
+    for cube in &snapshot.tree_cubes {
+        entities.push(Entity::new(
+            MESH_CUBE,
+            Vec3f32::new(cube.center.x as f32, cube.center.y as f32, cube.center.z as f32),
+            Quaternion::new_identity(),
+            cube.width as f32 * TREE_CUBE_SCALE_FACTOR,
+            TREE_COLOR,
+            TREE_SHINYNESS,
         ));
     }
 
@@ -115,7 +120,7 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
     // todo: Draw an actual shell instead of a sphere.
     // todo: Add back once you sort out transparency.
     for shell in &snapshot.shells {
-        // let center = Vec3f32_b::new(shell.center.x, shell.center.y, shell.center.z);
+        // let center = Vec3f32::new(shell.center.x, shell.center.y, shell.center.z);
 
         // let entity = Entity::new(
         //     2,

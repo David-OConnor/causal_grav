@@ -8,7 +8,7 @@ use std::{
     time::Instant,
 };
 
-use barnes_hut::{BhConfig, BodyModel, Cube, Tree};
+use barnes_hut::{BhConfig, BodyModel, Cube, Node, Tree};
 use bincode::{Decode, Encode};
 use lin_alg::f64::Vec3;
 use rand::Rng;
@@ -23,6 +23,7 @@ use crate::{
     render::render,
     units::{A0_MOND, C},
 };
+use crate::gaussian::GaussianShell;
 
 mod accel;
 mod body_creation;
@@ -69,8 +70,9 @@ mod util;
 //
 // Some sort of cumulative drag?? Can we estimate and test this?
 
-const BOUNDING_BOX_PAD: f64 = 0.3;
-const BB_GEN_RATIO: usize = 5;
+// const BOUNDING_BOX_PAD: f64 = 0.3;
+const BOUNDING_BOX_PAD: f64 = 0.;
+const BB_GEN_RATIO: usize = 1;
 
 const SAVE_FILE: &str = "config.grav";
 const DEFAULT_SNAPSHOT_FILE: &str = "snapshot.grav";
@@ -100,12 +102,15 @@ pub struct Config {
     bh_config: BhConfig,
     /// Experimental tool; scale all published V magnitudes by this.
     v_scaler: f64,
+    /// Use instantaneous Newtonian forces instead of tree code.
+    skip_tree: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
         let dt = 2.0e-3;
-        let shell_creation_ratio = 12;
+        // let shell_creation_ratio = 12;
+        let shell_creation_ratio = 1; // todo: A/R.
 
         // Important: Shell spacing is only accurate if using non-dynamic DT.
 
@@ -128,12 +133,13 @@ impl Default for Config {
             num_bodies_bulge,
             softening_factor_sq: 0.0001,
             // softening_factor_sq: 0.05,
-            snapshot_ratio: 4,
+            snapshot_ratio: 8,
             bh_config: BhConfig {
                 // θ: 0.4,
                 ..Default::default()
             },
-            v_scaler: 1.0
+            v_scaler: 1.0,
+            skip_tree: false,
         }
     }
 }
@@ -166,6 +172,7 @@ pub struct StateUi {
     galaxy_model: GalaxyModel,
     /// For display in the UI. cached.
     galaxy_descrip: GalaxyDescrip,
+    draw_tree: bool,
 }
 
 impl Default for StateUi {
@@ -182,6 +189,7 @@ impl Default for StateUi {
             add_halo: Default::default(),
             galaxy_model,
             galaxy_descrip: galaxy_model.descrip(),
+            draw_tree: false,
         }
     }
 }
@@ -208,8 +216,12 @@ impl State {
         );
         self.body_masses = self.bodies.iter().map(|b| b.mass as f32).collect();
 
+        self.time_elapsed = 0.;
         self.snapshots = Vec::new();
-        self.take_snapshot(0., 0.); // Initial snapshot; t=0.
+        self.take_snapshot(0., Vec::new()); // Initial snapshot; t=0.
+        self.ui.snapshot_selected = 0;
+
+        self.shells = Vec::new();
 
         let rotation_curve = properties::rotation_curve(&self.bodies, Vec3::new_zero(), C);
         let mass_density = properties::mass_density(&self.bodies, Vec3::new_zero());
@@ -222,28 +234,14 @@ impl State {
         self.shells.retain(|shell| shell.radius <= MAX_SHELL_R);
     }
 
-    fn take_snapshot(&mut self, time: f64, dt: f64) {
+    fn take_snapshot(&mut self, dt: f64, tree_nodes: Vec<Cube>) {
         self.snapshots.push(SnapShot {
-            time: time as f32,
+            time: self.time_elapsed as f32,
             body_posits: self.bodies.iter().map(|b| vec3_to_f32(b.posit)).collect(),
-            // V_at_bodies: self
-            //     .bodies
-            //     .iter()
-            //     .map(|b| vec_to_f32(b.V_acting_on))
-            //     .collect(),
             body_accs: self.bodies.iter().map(|b| vec3_to_f32(b.accel)).collect(),
-            // rays: self
-            //     .rays
-            //     .iter()
-            //     .map(|r| {
-            //         (
-            //             Vec3f32::new(r.posit.x as f32, r.posit.y as f32, r.posit.z as f32),
-            //             r.emitter_id,
-            //         )
-            //     })
-            //     .collect(),
             shells: self.shells.iter().map(GravShellSnapshot::new).collect(),
             dt: dt as f32,
+            tree_cubes: tree_nodes
         })
     }
 }
@@ -266,6 +264,8 @@ impl Body {
             center: self.posit,
             radius: 0.,
             src_mass: self.mass,
+            body_vel: self.vel, // todo: A/R
+            body_acc: self.accel, // todo: A/R
         }
     }
 }
@@ -280,53 +280,55 @@ impl BodyModel for Body {
     }
 }
 
-// // (radius, charge_in_radius)
-// fn density(
-//     elec_posits: &[Vec3f32],
-//     q_per_elec: f64,
-//     center_ref: Vec3f32,
-// ) -> Vec<((f32, f32), f32)> {
-//     // Must be ascending radii for the below code to work.
-//     let per_elec = q_per_elec as f32;
-//
-//     // Equidistant ish, for now.
-//     let mut result = vec![
-//         ((0.0, 0.2), 0.),
-//         ((0.2, 0.4), 0.),
-//         ((0.4, 0.6), 0.),
-//         ((0.8, 1.), 0.),
-//         ((1., 1.2), 0.),
-//         ((1.2, 1.4), 0.),
-//         ((1.4, 1.6), 0.),
-//         ((1.6, 1.8), 0.),
-//         ((1.8, 2.0), 0.),
-//         ((2.0, 9999.), 0.),
-//     ];
-//
-//     for (r_bound, q) in &mut result {
-//         for posit in elec_posits {
-//             let mag = (center_ref - *posit).magnitude();
-//             if mag < r_bound.1 && mag > r_bound.0 {
-//                 *q += per_elec;
-//             }
-//         }
-//     }
-//
-//     result
-// }
-
 #[derive(Debug, Clone)]
+/// Represents gravitational potential, as a shell. This allows for gravitational force to have finite speed,
+/// and act locally. We combine gaussians to achieve a uniform-like distribution.
+///
+/// See the S. Carlip "Abberation and the speed of gravity" for ideas on how to model the apparent lack of
+/// abberation in real models, in conjunction with a finite speed of gravity. Should these velocity-dependent
+/// abberation-cancelling terms be included at shell init from data on the source body alone, or do
+/// they develop as the shell propogates, e.g. thorugh interaction with other shells?
+///
+/// First step: Add first and second-order (velocity and acc) terms from the body's init condition.
 struct GravShell {
     emitter_id: usize,
     center: Vec3,
     radius: f64,
     src_mass: f64,
+    /// Body velocity at creation. Experimenting with velocity-dependent effects, which may be required.
+    /// todo: Alternate model: Maybe the wave doesn't get this information at the start, but it gets
+    /// todo it on the way from interaction with other waves.
+    body_vel: Vec3,
+    /// Is this also required?
+    /// *photon-rocket* accel doesn't affect it, but gravitational accel?
+    body_acc: Vec3,
+}
+
+impl GravShell {
+    /// Expand the radius at C, in one timestep.
+    pub fn iter_t(&mut self, dt: f64) {
+        self.radius += C * dt;
+    }
+
+    pub fn value(&self, posit: Vec3, gauss_c: f64) -> f64 {
+        let gauss = GaussianShell {
+            center: self.center,
+            radius: self.radius,
+            a: self.src_mass,
+            c: gauss_c,
+        };
+
+         gauss.value(posit)
+    }
 }
 
 /// Entry point for computation; rename A/R.
 fn build(state: &mut State, force_model: ForceModel) {
-    state.ui.building = true;
     println!("Building...");
+    state.ui.building = true;
+
+    // We must refresh bodies prior to building, to reset their positions after the previous update.
+    state.refresh_bodies();
 
     // Allow gravity shells to propogate to reach a steady state, ideally.
     // todo: make this dynamic
@@ -350,7 +352,9 @@ fn build(state: &mut State, force_model: ForceModel) {
     let mut tree_time = 0;
     let mut start_time_integ = Instant::now();
 
-    let mut bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
+    // todo: A/R.
+    // let mut bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
+    let mut bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, false).unwrap();
 
     const BENCH_RATIO: usize = 1_000;
 
@@ -371,13 +375,13 @@ fn build(state: &mut State, force_model: ForceModel) {
                 }
             }
             for shell in &mut state.shells {
-                shell.radius += C * state.config.dt;
+                shell.iter_t(state.config.dt);
             }
         }
 
         let cfg = &state.config; // Code cleaner.
 
-        if t % BB_GEN_RATIO == 0 {
+        if t % BB_GEN_RATIO == 0 && !cfg.skip_tree {
             bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
         }
 
@@ -397,11 +401,11 @@ fn build(state: &mut State, force_model: ForceModel) {
         }
 
         let mut tree = None;
-        if force_model != ForceModel::GaussShells {
+        if force_model != ForceModel::GaussShells && !cfg.skip_tree {
             tree = Some(Tree::new(&state.bodies, &bb, &cfg.bh_config));
         }
 
-        if t % BENCH_RATIO == 0 {
+        if t % BENCH_RATIO == 0 && force_model != ForceModel::GaussShells && !cfg.skip_tree {
             tree_time = start_time_tree.elapsed().as_micros();
         }
 
@@ -414,11 +418,19 @@ fn build(state: &mut State, force_model: ForceModel) {
         if t % BENCH_RATIO == 0 {
             start_time_integ = Instant::now();
         }
-        if force_model != ForceModel::GaussShells || state.time_elapsed > integrate_start_t {
-            // todo: You must update this acc using your tree approach.
-            let acc = |id_target, posit_target| match force_model {
-                ForceModel::Newton => {
-                    // accel::acc_newton(posit, id, &bodies_other, None, softening_factor_sq)
+
+        let bodies_other = if cfg.skip_tree {
+            Some(state.bodies.clone())
+        } else {
+            None
+        };
+
+        // This acceleration function acts on a target id and position.
+        let acc = |id_target, posit_target| match force_model {
+            ForceModel::Newton => {
+                if cfg.skip_tree {
+                    accel::acc_newton(posit_target, id_target, &bodies_other.as_ref().unwrap(), None, cfg.softening_factor_sq)
+                } else {
                     let acc_fn = |acc_dir, mass, dist| {
                         acc_newton_inner_with_mond(
                             acc_dir,
@@ -437,15 +449,18 @@ fn build(state: &mut State, force_model: ForceModel) {
                         &acc_fn,
                     )
                 }
-                ForceModel::GaussShells => accel::calc_acc_shell(
-                    &state.shells,
-                    posit_target,
-                    id_target,
-                    cfg.gauss_c,
-                    cfg.softening_factor_sq,
-                ),
-                ForceModel::Mond(mond_fn) => {
-                    // accel::acc_newton(posit_target, id_target, &bodies_other, Some(mond_fn), softening_factor_sq)
+            }
+            ForceModel::GaussShells => accel::calc_acc_shell(
+                &state.shells,
+                posit_target,
+                id_target,
+                cfg.gauss_c,
+                cfg.softening_factor_sq,
+            ),
+            ForceModel::Mond(mond_fn) => {
+                if cfg.skip_tree {
+                    accel::acc_newton(posit_target, id_target, &bodies_other.as_ref().unwrap(), Some(mond_fn), cfg.softening_factor_sq)
+                } else {
                     let acc_fn = |acc_dir, mass, dist| {
                         acc_newton_inner_with_mond(
                             acc_dir,
@@ -464,8 +479,10 @@ fn build(state: &mut State, force_model: ForceModel) {
                         &acc_fn,
                     )
                 }
-            };
+            }
+        };
 
+        if force_model != ForceModel::GaussShells || state.time_elapsed > integrate_start_t {
             // todo: COme back to skiping the first body. Setting the central body as immovable for now.
             // todo: While we have a central body...
             // Iterate, in parallel, over target bodies. The loop over source bodies, per target, is handled
@@ -474,13 +491,13 @@ fn build(state: &mut State, force_model: ForceModel) {
                 .bodies
                 .par_iter_mut()
                 .enumerate()
-                .skip(1) // Skip the central body
+                // .skip(1) // Skip the central body
                 .for_each(|(id_target, body_target)| {
                     integrate_rk4(body_target, id_target, &acc, dt);
                 });
         }
 
-        if t % BENCH_RATIO == 0 {
+        if t % BENCH_RATIO == 0 && force_model != ForceModel::GaussShells && !cfg.skip_tree {
             println!(
                 "t: {}k, Tree time: {}μs Tree size: {} Integ time: {}μs",
                 t / 1_000,
@@ -492,11 +509,31 @@ fn build(state: &mut State, force_model: ForceModel) {
 
         // Save the current state to a snapshot, for later playback.
         if t % cfg.snapshot_ratio == 0 {
-            state.take_snapshot(state.time_elapsed, dt);
+            let nodes: Vec<Cube> = if let Some(t) = &tree {
+                if state.ui.draw_tree {
+                    // Whole tree
+                    // t.nodes.iter().map(|n| n.bounding_box.clone()).collect()
+
+                    // Tree WRT a specific (arbitrary) body.
+                    let leaves = t.leaves(
+                        state.bodies[0].posit,
+                        0,
+                        &state.config.bh_config,
+                    );
+
+                    leaves.iter().map(|n| n.bounding_box.clone()).collect()
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            };
+            state.take_snapshot(dt, nodes);
         }
     }
 
     state.ui.building = false;
+    println!("Final V/c: {:.6}", state.bodies[0].vel.magnitude() / C); // todo temp
     println!("Build complete.");
 }
 

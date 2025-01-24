@@ -85,6 +85,27 @@ impl GalaxyDescrip {
         num_bodies_bulge: usize,
         v_scaler: f64,
     ) -> Vec<Body> {
+        //todo temp.
+        let p = 3.;
+        let m = 1e14;
+        let v_mag = v_scaler;
+
+        // todo: Solve the jitter at low v with tree.
+        return vec![
+            Body {
+                posit: Vec3::new(-p, 0., 0.),
+                vel: Vec3::new(0., v_mag, 0.),
+                accel: Vec3::new_zero(),
+                mass: m
+            },
+            Body {
+                posit: Vec3::new(p, 0., 0.),
+                vel: Vec3::new(0., -v_mag, 0.),
+                accel: Vec3::new_zero(),
+                mass: m
+            },
+        ];
+
         let mut result = Vec::with_capacity(num_bodies_disk + num_bodies_bulge);
 
         // result.append(&mut self.make_disk(num_bodies_disk, num_rings_disk));

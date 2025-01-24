@@ -24,10 +24,19 @@ pub const BODY_SIZE_SCALER: f32 = 1.0e-9; // We multiply mass by this.
 pub const BODY_SIZE_MIN: f32 = 0.01;
 pub const BODY_SIZE_MAX: f32 = 0.6;
 
-pub const BODY_SHINYNESS: f32 = 2.;
-pub const SHELL_SHINYNESS: f32 = 2.;
 pub const BODY_COLOR: Color = (1.0, 0.4, 0.4);
 pub const SHELL_COLOR: Color = (1.0, 0.6, 0.2);
+pub const TREE_COLOR: Color = (0.4, 0.4, 1.0);
+pub const BODY_SHINYNESS: f32 = 2.;
+pub const SHELL_SHINYNESS: f32 = 2.;
+pub const TREE_SHINYNESS: f32 = 1.;
+
+// Allows individual cubes to be distinguished by creating gaps between them.
+pub const TREE_CUBE_SCALE_FACTOR: f32 = 0.85;
+
+// Keep this in sync with mesh init.
+pub const MESH_SPHERE: usize = 0;
+pub const MESH_CUBE: usize = 1;
 
 pub const SHELL_OPACITY: f32 = 0.01;
 
@@ -65,33 +74,25 @@ pub fn render(state: State) {
         },
         lighting: Lighting {
             ambient_color: [-1., 1., 1., 0.5],
-            ambient_intensity: 0.03,
+            ambient_intensity: 0.02,
             point_lights: vec![
-                // Light from above and to a side.
+                // Light from above
                 PointLight {
                     type_: LightType::Omnidirectional,
-                    position: Vec3::new(60., 200., 60.),
+                    position: Vec3::new(20., 20., 100.),
                     diffuse_color: [0.3, 0.4, 0.5, 1.],
                     specular_color: [0.3, 0.4, 0.5, 1.],
-                    diffuse_intensity: 5_000.,
-                    specular_intensity: 2_000.,
+                    diffuse_intensity: 1_000.,
+                    specular_intensity: 4_000.,
                 },
                 // Light from below
                 PointLight {
                     type_: LightType::Omnidirectional,
-                    position: Vec3::new(20., -100., 40.),
+                    position: Vec3::new(-20., 20., -100.),
                     diffuse_color: [0.3, 0.4, 0.5, 1.],
                     specular_color: [0.3, 0.4, 0.5, 1.],
-                    diffuse_intensity: 2_000.,
-                    specular_intensity: 10_000.,
-                },
-                PointLight {
-                    type_: LightType::Omnidirectional,
-                    position: Vec3::new(20., -100., -100.),
-                    diffuse_color: [0.3, 0.4, 0.5, 1.],
-                    specular_color: [0.3, 0.4, 0.5, 1.],
-                    diffuse_intensity: 10_000.,
-                    specular_intensity: 0.,
+                    diffuse_intensity: 1_000.,
+                    specular_intensity: 4_000.,
                 },
             ],
         },

@@ -12,6 +12,7 @@ use crate::{
     , ForceModel, playback::{change_snapshot, SnapShot}, SAVE_FILE, State, util,
 };
 use crate::galaxy_data::GalaxyModel;
+use crate::render::{TREE_COLOR, TREE_CUBE_SCALE_FACTOR, TREE_SHINYNESS};
 
 pub const ROW_SPACING: f32 = 10.;
 pub const COL_SPACING: f32 = 30.;
@@ -209,6 +210,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                 ui,
             );
 
+            // todo: Remove A/R now that cube is in snapshots.
             if ui.button("Tree").clicked() {
                 // todo: Of current snapshot.
                 let bb = Cube::from_bodies(&state.bodies, BOUNDING_BOX_PAD, true).unwrap();
@@ -249,14 +251,20 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                         1,
                         posit,
                         Quaternion::new_identity(),
-                        leaf.bounding_box.width as f32 * 0.85,
-                        (50., 200., 220.),
-                        1.,
+                        leaf.bounding_box.width as f32 * TREE_CUBE_SCALE_FACTOR,
+                        TREE_COLOR,
+                        TREE_SHINYNESS,
                     ));
                 }
 
                 engine_updates.entities = true;
             }
+
+            ui.add_space(COL_SPACING);
+
+            ui.checkbox(&mut state.config.skip_tree, "Skip tree");
+
+            ui.checkbox(&mut state.ui.draw_tree, "Draw tree");
 
             ui.add_space(COL_SPACING * 2.);
 
