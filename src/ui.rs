@@ -7,12 +7,12 @@ use lin_alg::f32::{Quaternion, Vec3};
 
 use crate::{
     accel::MondFn,
-    BOUNDING_BOX_PAD,
-    build
-    , ForceModel, playback::{change_snapshot, SnapShot}, SAVE_FILE, State, util,
+    build,
+    galaxy_data::GalaxyModel,
+    playback::{change_snapshot, SnapShot},
+    render::{TREE_COLOR, TREE_CUBE_SCALE_FACTOR, TREE_SHINYNESS},
+    util, ForceModel, State, BOUNDING_BOX_PAD, SAVE_FILE,
 };
-use crate::galaxy_data::GalaxyModel;
-use crate::render::{TREE_COLOR, TREE_CUBE_SCALE_FACTOR, TREE_SHINYNESS};
 
 pub const ROW_SPACING: f32 = 10.;
 pub const COL_SPACING: f32 = 30.;
@@ -240,6 +240,10 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                     leaves.len(),
                     tree.nodes.len()
                 );
+
+                // for leaf in &leaves { // todo te p
+                //     println!("Leaf: {:?}", leaf);
+                // }
 
                 for leaf in leaves {
                     let c = leaf.bounding_box.center;

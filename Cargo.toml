@@ -5,14 +5,15 @@ edition = "2021"
 
 [dependencies]
 graphics = { path = "../graphics" }
-#lin_alg = "^1.0.3"
-lin_alg = { path = "../lin_alg", features = ["encode"] }
-barnes_hut = { path = "../barnes_hut", features = ["encode"]}
 egui = "^0.30.0"
 
-rand = "^0.8.5"
+#lin_alg = "^1.0.4"
+lin_alg = { path = "../lin_alg", features = ["encode"] }
 
-# cudarc = { version = "^0.12.1", features=["cuda-12060"] }
+# todo: Use https://github.com/bempp/kifmm when ready. Adapt for Windows.
+barnes_hut = { path = "../barnes_hut", features = ["encode"]}
+
+rand = "^0.8.5"
 
 plotters = "^0.3.7"  # For 2d plots
 # For saving and loading snapshots.
@@ -20,4 +21,12 @@ bincode = "^2.0.0-rc.3"
 
 rayon = "^1.10.0"  # Parallel execution on CPU using thread pools.
 
-# todo: Use https://github.com/bempp/kifmm when ready! Adapt for Windows.
+# Keep this cuda version in sync with what you have installed on the system.
+cudarc = { version = "^0.13.3", optional=true, features=["cuda-12060"] }
+
+
+# We feature-gate the CUDA dependency, so this program can be run on computers that don't have a
+# suitable graphics chip.
+[features]
+default = []
+cuda = ["cudarc"]

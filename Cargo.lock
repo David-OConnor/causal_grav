@@ -193,7 +193,7 @@ dependencies = [
 
 [[package]]
 name = "barnes_hut"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "bincode",
  "lin_alg",
@@ -355,6 +355,7 @@ version = "0.1.0"
 dependencies = [
  "barnes_hut",
  "bincode",
+ "cudarc",
  "egui",
  "graphics",
  "lin_alg",
@@ -567,6 +568,15 @@ name = "crunchy"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
+
+[[package]]
+name = "cudarc"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "712390a76a83255b3d02760b8b3b3b7cb518f1f7cd83aafbbd65c382a7d6e8ef"
+dependencies = [
+ "libloading",
+]
 
 [[package]]
 name = "cursor-icon"

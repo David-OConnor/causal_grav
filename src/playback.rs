@@ -7,6 +7,7 @@ use std::{
     io::{ErrorKind, Read, Write},
     path::Path,
 };
+
 use barnes_hut::{Cube, Node};
 use bincode::{
     config,
@@ -21,11 +22,11 @@ use lin_alg::{
 
 use crate::{
     render::{
-        BODY_COLOR, BODY_SHINYNESS, BODY_SIZE_MAX, BODY_SIZE_MIN, BODY_SIZE_SCALER, SHELL_COLOR,
+        BODY_COLOR, BODY_SHINYNESS, BODY_SIZE_MAX, BODY_SIZE_MIN, BODY_SIZE_SCALER, MESH_CUBE,
+        MESH_SPHERE, SHELL_COLOR, TREE_COLOR, TREE_CUBE_SCALE_FACTOR, TREE_SHINYNESS,
     },
     GravShell,
 };
-use crate::render::{MESH_CUBE, MESH_SPHERE, TREE_COLOR, TREE_CUBE_SCALE_FACTOR, TREE_SHINYNESS};
 
 #[derive(Debug, Encode, Decode)]
 /// A compact version
@@ -60,7 +61,7 @@ pub struct SnapShot {
     // todo: Compact form for shells, as above?
     pub shells: Vec<GravShellSnapshot>,
     pub dt: f32,
-    pub tree_cubes: Vec<Cube> // todo: Custom type type f32, as above.
+    pub tree_cubes: Vec<Cube>, // todo: Custom type type f32, as above.
 }
 
 pub fn vec3_to_f32(v: Vec3) -> Vec3f32 {
@@ -98,7 +99,11 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
     for cube in &snapshot.tree_cubes {
         entities.push(Entity::new(
             MESH_CUBE,
-            Vec3f32::new(cube.center.x as f32, cube.center.y as f32, cube.center.z as f32),
+            Vec3f32::new(
+                cube.center.x as f32,
+                cube.center.y as f32,
+                cube.center.z as f32,
+            ),
             Quaternion::new_identity(),
             cube.width as f32 * TREE_CUBE_SCALE_FACTOR,
             TREE_COLOR,

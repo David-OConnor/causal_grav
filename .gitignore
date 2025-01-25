@@ -9,3 +9,10 @@ Cargo.lock
 # Plots
 *.png
 
+/plots/
+
+# CUDA
+*.exe
+*.exp
+*.lib
+*.ptx

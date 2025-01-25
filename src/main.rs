@@ -5,25 +5,28 @@ use std::{
     io,
     path::{Path, PathBuf},
     str::FromStr,
+    sync::Arc,
     time::Instant,
 };
 
 use barnes_hut::{BhConfig, BodyModel, Cube, Node, Tree};
 use bincode::{Decode, Encode};
+#[cfg(feature = "cuda")]
+use cudarc::{driver::CudaDevice, nvrtc::Ptx};
+use galaxy_data::GalaxyModel;
 use lin_alg::f64::Vec3;
 use rand::Rng;
 use rayon::prelude::*;
-use galaxy_data::GalaxyModel;
+
 use crate::{
     accel::{acc_newton_inner_with_mond, MondFn},
     body_creation::GalaxyDescrip,
-    gaussian::{COEFF_C, MAX_SHELL_R},
+    gaussian::{GaussianShell, COEFF_C, MAX_SHELL_R},
     integrate::integrate_rk4,
-    playback::{GravShellSnapshot, SnapShot, vec3_to_f32},
+    playback::{vec3_to_f32, GravShellSnapshot, SnapShot},
     render::render,
     units::{A0_MOND, C},
 };
-use crate::gaussian::GaussianShell;
 
 mod accel;
 mod body_creation;
@@ -33,6 +36,8 @@ mod fluid_dynamics;
 mod galaxy_data;
 mod gaussian;
 mod gem;
+#[cfg(feature = "cuda")]
+mod gpu;
 mod image_parsing;
 mod integrate;
 mod playback;
@@ -41,8 +46,6 @@ mod render;
 mod ui;
 mod units;
 mod util;
-
-
 // todo: Try a Galaxy filament simulation; large scale CDM theory. Can we get filaments without CDM?
 // todo: - try an earth-perspective visualization and analysis. From the perspective of earth, validate these
 // todo galaxies vs the images we get.
@@ -79,6 +82,13 @@ const DEFAULT_SNAPSHOT_FILE: &str = "snapshot.grav";
 
 const DISK_RING_PORTION: usize = 10;
 const BULGE_RING_PORTION: usize = 5;
+
+#[derive(Debug, Clone)]
+pub enum ComputationDevice {
+    Cpu,
+    #[cfg(feature = "cuda")]
+    Gpu(Arc<CudaDevice>),
+}
 
 // todo: Custom Bincode config that only contains the fields you customize directly.
 #[derive(Encode, Decode)]
@@ -241,7 +251,7 @@ impl State {
             body_accs: self.bodies.iter().map(|b| vec3_to_f32(b.accel)).collect(),
             shells: self.shells.iter().map(GravShellSnapshot::new).collect(),
             dt: dt as f32,
-            tree_cubes: tree_nodes
+            tree_cubes: tree_nodes,
         })
     }
 }
@@ -264,7 +274,7 @@ impl Body {
             center: self.posit,
             radius: 0.,
             src_mass: self.mass,
-            body_vel: self.vel, // todo: A/R
+            body_vel: self.vel,   // todo: A/R
             body_acc: self.accel, // todo: A/R
         }
     }
@@ -318,7 +328,7 @@ impl GravShell {
             c: gauss_c,
         };
 
-         gauss.value(posit)
+        gauss.value(posit)
     }
 }
 
@@ -429,7 +439,13 @@ fn build(state: &mut State, force_model: ForceModel) {
         let acc = |id_target, posit_target| match force_model {
             ForceModel::Newton => {
                 if cfg.skip_tree {
-                    accel::acc_newton(posit_target, id_target, &bodies_other.as_ref().unwrap(), None, cfg.softening_factor_sq)
+                    accel::acc_newton(
+                        posit_target,
+                        id_target,
+                        &bodies_other.as_ref().unwrap(),
+                        None,
+                        cfg.softening_factor_sq,
+                    )
                 } else {
                     let acc_fn = |acc_dir, mass, dist| {
                         acc_newton_inner_with_mond(
@@ -459,7 +475,13 @@ fn build(state: &mut State, force_model: ForceModel) {
             ),
             ForceModel::Mond(mond_fn) => {
                 if cfg.skip_tree {
-                    accel::acc_newton(posit_target, id_target, &bodies_other.as_ref().unwrap(), Some(mond_fn), cfg.softening_factor_sq)
+                    accel::acc_newton(
+                        posit_target,
+                        id_target,
+                        &bodies_other.as_ref().unwrap(),
+                        Some(mond_fn),
+                        cfg.softening_factor_sq,
+                    )
                 } else {
                     let acc_fn = |acc_dir, mass, dist| {
                         acc_newton_inner_with_mond(
@@ -515,11 +537,7 @@ fn build(state: &mut State, force_model: ForceModel) {
                     // t.nodes.iter().map(|n| n.bounding_box.clone()).collect()
 
                     // Tree WRT a specific (arbitrary) body.
-                    let leaves = t.leaves(
-                        state.bodies[0].posit,
-                        0,
-                        &state.config.bh_config,
-                    );
+                    let leaves = t.leaves(state.bodies[0].posit, 0, &state.config.bh_config);
 
                     leaves.iter().map(|n| n.bounding_box.clone()).collect()
                 } else {
@@ -538,6 +556,21 @@ fn build(state: &mut State, force_model: ForceModel) {
 }
 
 fn main() {
+    #[cfg(feature = "cuda")]
+    let dev = {
+        // This is compiled in `build_`.
+        let cuda_dev = CudaDevice::new(0).unwrap();
+        cuda_dev
+            .load_ptx(Ptx::from_file("./cuda.ptx"), "cuda", &["newton_kernel"])
+            .unwrap();
+
+        // println!("Using the GPU for computations.");
+        ComputationDevice::Gpu(cuda_dev)
+    };
+
+    #[cfg(not(feature = "cuda"))]
+    let dev = ComputationDevice::Cpu;
+
     let mut state = State::default();
     if let Ok(cfg) = util::load(&PathBuf::from_str(SAVE_FILE).unwrap()) {
         state.config = cfg;

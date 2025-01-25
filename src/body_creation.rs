@@ -4,11 +4,16 @@
 
 use std::f64::consts::TAU;
 
-use lin_alg::{f64::Vec3, linspace};
-use lin_alg::f64::Quaternion;
-use rand::Rng;
-use rand::rngs::ThreadRng;
-use crate::{Body, DISK_RING_PORTION, util::{interpolate, volume_sphere}};
+use lin_alg::{
+    f64::{Quaternion, Vec3},
+    linspace,
+};
+use rand::{rngs::ThreadRng, Rng};
+
+use crate::{
+    util::{interpolate, volume_sphere},
+    Body, DISK_RING_PORTION,
+};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum GalaxyShape {
@@ -96,13 +101,13 @@ impl GalaxyDescrip {
                 posit: Vec3::new(-p, 0., 0.),
                 vel: Vec3::new(0., v_mag, 0.),
                 accel: Vec3::new_zero(),
-                mass: m
+                mass: m,
             },
             Body {
                 posit: Vec3::new(p, 0., 0.),
                 vel: Vec3::new(0., -v_mag, 0.),
                 accel: Vec3::new_zero(),
-                mass: m
+                mass: m,
             },
         ];
 
@@ -219,20 +224,29 @@ fn make_distrib_along_rings(
     // let total_area = r_last.powi(2) * TAU / 2.;
     // let total_volume = volume_sphere(r_last);
 
-    let(bodies_by_r, mass_per_body_by_r) = select_num_bodies(&r_all, dr, mass_density, num_bodies);
+    let (bodies_by_r, mass_per_body_by_r) = select_num_bodies(&r_all, dr, mass_density, num_bodies);
 
     // Todo: If it works for your other approach, add in the center single body.
 
     for (i, r) in r_all.iter().enumerate() {
         println!(
             "Body data. r: {r} N bodies: {:?} mass-per-body: {:.4?}, mass-this-r: {:.4?}",
-            bodies_by_r[i], mass_per_body_by_r[i], interpolate(mass_density, *r).unwrap()
+            bodies_by_r[i],
+            mass_per_body_by_r[i],
+            interpolate(mass_density, *r).unwrap()
         );
 
         let v_mag = interpolate(vel, *r).unwrap() * v_scaler;
 
         for _ in 0..bodies_by_r[i] {
-            result.push(create_body(*r, mass_per_body_by_r[i], v_mag, eccentricity, three_d, &mut rng));
+            result.push(create_body(
+                *r,
+                mass_per_body_by_r[i],
+                v_mag,
+                eccentricity,
+                three_d,
+                &mut rng,
+            ));
         }
     }
 
@@ -259,7 +273,12 @@ fn make_distrib_along_rings(
 }
 
 /// Select the number of bodies to create in a given radius-driven region.
-fn select_num_bodies(r_all: &[f64], dr: f64, mass_density: &[(f64, f64)], num_bodies: usize) -> (Vec<usize>, Vec<f64>) {
+fn select_num_bodies(
+    r_all: &[f64],
+    dr: f64,
+    mass_density: &[(f64, f64)],
+    num_bodies: usize,
+) -> (Vec<usize>, Vec<f64>) {
     // todo: Experiment with this.
     let min_bodies_per_ring_area = 0.4;
 
@@ -273,7 +292,7 @@ fn select_num_bodies(r_all: &[f64], dr: f64, mass_density: &[(f64, f64)], num_bo
 
     for r in r_all {
         // Compute the minimum number of bodies at each r
-        let body_count_min = r.powi(2)* TAU / 2. * min_bodies_per_ring_area;
+        let body_count_min = r.powi(2) * TAU / 2. * min_bodies_per_ring_area;
 
         body_num_by_r_init.push(body_count_min);
 
@@ -296,11 +315,17 @@ fn select_num_bodies(r_all: &[f64], dr: f64, mass_density: &[(f64, f64)], num_bo
     }
 
     (bodies_by_r, mass_per_body_by_r)
-
 }
 
 /// Add a body at a given distance from the center,  and random non-distance posit.
-fn create_body(r: f64, mass: f64, v_mag: f64, eccentricity: f64, three_d: bool, rng: &mut ThreadRng) -> Body {
+fn create_body(
+    r: f64,
+    mass: f64,
+    v_mag: f64,
+    eccentricity: f64,
+    three_d: bool,
+    rng: &mut ThreadRng,
+) -> Body {
     let θ = rng.gen_range(0.0..TAU);
 
     let (posit, vel) = if three_d {
@@ -320,8 +345,8 @@ fn create_body(r: f64, mass: f64, v_mag: f64, eccentricity: f64, three_d: bool, 
         // todo: Update this logic to make the mass density sufficiently 3d?
 
         let scale_x = 1.0 - eccentricity; // Eccentricity factor for x-axis
-        // let posit = Vec3::new(x * scale_x, y, z);
-        // todo: Put eccentricity back.
+                                          // let posit = Vec3::new(x * scale_x, y, z);
+                                          // todo: Put eccentricity back.
         let posit = Vec3::new(x, y, z);
 
         // Velocity direction: perpendicular to the radius vector
@@ -399,10 +424,9 @@ fn make_distrib_data_area(
         let area_center = center_section_r.powi(2) * TAU / 2.;
         // let volume_center = volume_sphere(center_section_r);
 
-
         let mass_density_center: f64 = mass_density[..rings_in_center].iter().map(|m| m.1).sum();
         // todo: This averages the mass density of the inner rings. Is this what we want?
-        let mass_center =  mass_density_center / rings_in_center as f64 * area_center;
+        let mass_center = mass_density_center / rings_in_center as f64 * area_center;
 
         // todo: Temp rm.
 
@@ -416,8 +440,9 @@ fn make_distrib_data_area(
 
     // Create bands of masses centered on each r.
     for (i, (r, mass)) in mass_density[0..mass_density.len() - 1].iter().enumerate() {
-        if i < rings_in_center { // instead of indexing 1.., this keeps i in sync.
-            continue
+        if i < rings_in_center {
+            // instead of indexing 1.., this keeps i in sync.
+            continue;
         }
         let r_prev = mass_density[i - 1].0;
         let r_this = mass_density[i].0;
@@ -426,8 +451,8 @@ fn make_distrib_data_area(
         let dr_prev = r_this - r_prev;
         let dr_next = r_next - r_this;
 
-        let r_inner = r_this - dr_prev/2.;
-        let r_outer = r_this + dr_next/2.;
+        let r_inner = r_this - dr_prev / 2.;
+        let r_outer = r_this + dr_next / 2.;
 
         let area = {
             let area_outer = r_outer.powi(2) * TAU / 2.;
@@ -447,14 +472,23 @@ fn make_distrib_data_area(
 
         println!(
             "Body data. r: {r} N bodies: {:?} mass-per-body: {:.0?}k, mass-this-r: {:.4?}",
-            body_num_this_area, mass_per_body/1000., mass_this_area
+            body_num_this_area,
+            mass_per_body / 1000.,
+            mass_this_area
         );
 
         for _ in 0..body_num_this_area {
             let r_body = rng.gen_range(r_inner..r_outer);
             let v_mag = interpolate(vel, r_body).unwrap() * v_scaler;
 
-            result.push(create_body(r_body, mass_per_body, v_mag, eccentricity, three_d, &mut rng));
+            result.push(create_body(
+                r_body,
+                mass_per_body,
+                v_mag,
+                eccentricity,
+                three_d,
+                &mut rng,
+            ));
         }
     }
 

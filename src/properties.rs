@@ -154,7 +154,7 @@ pub fn plot(data: &[(f64, f64)], x_label: &str, y_label: &str, plot_title: &str,
         });
 
     // Create a drawing area for the plot
-    let fname = format!("{filename}.png");
+    let fname = format!("plots/{filename}.png");
     let root = BitMapBackend::new(&fname, (800, 600)).into_drawing_area();
     root.fill(&WHITE).unwrap();
 
