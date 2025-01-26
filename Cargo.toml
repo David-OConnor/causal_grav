@@ -12,6 +12,8 @@ lin_alg = { path = "../lin_alg", features = ["encode"] }
 
 # todo: Use https://github.com/bempp/kifmm when ready. Adapt for Windows.
 barnes_hut = { path = "../barnes_hut", features = ["encode"]}
+#kifmm = { git = "https://github.com/bempp/kifmm/" }
+#kifmm = { version = "^2.0.0" }
 
 rand = "^0.8.5"
 

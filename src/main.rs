@@ -14,6 +14,7 @@ use bincode::{Decode, Encode};
 #[cfg(feature = "cuda")]
 use cudarc::{driver::CudaDevice, nvrtc::Ptx};
 use galaxy_data::GalaxyModel;
+use grav_shell::{GravShell, MAX_SHELL_R};
 use lin_alg::f64::Vec3;
 use rand::Rng;
 use rayon::prelude::*;
@@ -21,7 +22,8 @@ use rayon::prelude::*;
 use crate::{
     accel::{acc_newton_inner_with_mond, MondFn},
     body_creation::GalaxyDescrip,
-    gaussian::{GaussianShell, COEFF_C, MAX_SHELL_R},
+    gaussian::GaussianShell,
+    grav_shell::COEFF_C,
     integrate::integrate_rk4,
     playback::{vec3_to_f32, GravShellSnapshot, SnapShot},
     render::render,
@@ -38,6 +40,7 @@ mod gaussian;
 mod gem;
 #[cfg(feature = "cuda")]
 mod gpu;
+mod grav_shell;
 mod image_parsing;
 mod integrate;
 mod playback;
@@ -119,26 +122,22 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         let dt = 2.0e-3;
-        // let shell_creation_ratio = 12;
-        let shell_creation_ratio = 1; // todo: A/R.
 
         // Important: Shell spacing is only accurate if using non-dynamic DT.
-
-        // In distance: t * d/t = d.
-        let shell_spacing = dt * shell_creation_ratio as f64 * C;
 
         let num_bodies_disk = 600;
         let num_bodies_bulge = 100;
 
-        Self {
+        let mut result = Self {
             num_timesteps: 5_000,
-            shell_creation_ratio,
+            shell_creation_ratio: 1,
+            // shell_creation_ratio: 12,
             dt,
             dt_integration_max: 0.01, // Not used
             // dynamic_dt_scaler: 0.01,
             dynamic_dt_scaler: 0.1, // not used.
             // num_rays_per_iter: 200,
-            gauss_c: shell_spacing * COEFF_C,
+            gauss_c,
             num_bodies_disk,
             num_bodies_bulge,
             softening_factor_sq: 0.0001,
@@ -150,7 +149,10 @@ impl Default for Config {
             },
             v_scaler: 1.0,
             skip_tree: false,
-        }
+        };
+
+        result.refresh_shell_ratio();
+        result
     }
 }
 
@@ -158,6 +160,13 @@ impl Config {
     /// Load the config.w
     pub fn load(&mut self, path: &Path) -> io::Result<Self> {
         util::load(path)
+    }
+
+    /// Run this whne dt, or shell creation ratio changes, to update the Gaussian width.
+    pub fn refresh_shell_ratio(&mut self) {
+        // In distance: t * d/t = d.
+        let shell_spacing = self.dt * self.shell_creation_ratio as f64 * C;
+        self.gauss_c = shell_spacing * COEFF_C;
     }
 }
 
@@ -268,9 +277,9 @@ struct Body {
 
 impl Body {
     /// Generate a shell traveling outward.
-    pub fn create_shell(&self, emitter_id: usize) -> GravShell {
+    pub fn create_shell(&self, source_id: usize) -> GravShell {
         GravShell {
-            emitter_id,
+            source_id,
             center: self.posit,
             radius: 0.,
             src_mass: self.mass,
@@ -287,48 +296,6 @@ impl BodyModel for Body {
 
     fn mass(&self) -> f64 {
         self.mass
-    }
-}
-
-#[derive(Debug, Clone)]
-/// Represents gravitational potential, as a shell. This allows for gravitational force to have finite speed,
-/// and act locally. We combine gaussians to achieve a uniform-like distribution.
-///
-/// See the S. Carlip "Abberation and the speed of gravity" for ideas on how to model the apparent lack of
-/// abberation in real models, in conjunction with a finite speed of gravity. Should these velocity-dependent
-/// abberation-cancelling terms be included at shell init from data on the source body alone, or do
-/// they develop as the shell propogates, e.g. thorugh interaction with other shells?
-///
-/// First step: Add first and second-order (velocity and acc) terms from the body's init condition.
-struct GravShell {
-    emitter_id: usize,
-    center: Vec3,
-    radius: f64,
-    src_mass: f64,
-    /// Body velocity at creation. Experimenting with velocity-dependent effects, which may be required.
-    /// todo: Alternate model: Maybe the wave doesn't get this information at the start, but it gets
-    /// todo it on the way from interaction with other waves.
-    body_vel: Vec3,
-    /// Is this also required?
-    /// *photon-rocket* accel doesn't affect it, but gravitational accel?
-    body_acc: Vec3,
-}
-
-impl GravShell {
-    /// Expand the radius at C, in one timestep.
-    pub fn iter_t(&mut self, dt: f64) {
-        self.radius += C * dt;
-    }
-
-    pub fn value(&self, posit: Vec3, gauss_c: f64) -> f64 {
-        let gauss = GaussianShell {
-            center: self.center,
-            radius: self.radius,
-            a: self.src_mass,
-            c: gauss_c,
-        };
-
-        gauss.value(posit)
     }
 }
 
@@ -349,8 +316,8 @@ fn build(state: &mut State, force_model: ForceModel) {
             farthest_r = r;
         }
     }
-    // 2x: For the case of opposite sides of circle. More: A pad. May not be required.
-    farthest_r *= 2.5;
+    // 2x: For the case of opposite sides of circle.
+    farthest_r *= 2.;
     let integrate_start_t = farthest_r / C;
 
     println!(
@@ -537,7 +504,7 @@ fn build(state: &mut State, force_model: ForceModel) {
                     // t.nodes.iter().map(|n| n.bounding_box.clone()).collect()
 
                     // Tree WRT a specific (arbitrary) body.
-                    let leaves = t.leaves(state.bodies[0].posit, 0, &state.config.bh_config);
+                    let leaves = t.leaves(state.bodies[0].posit, &state.config.bh_config);
 
                     leaves.iter().map(|n| n.bounding_box.clone()).collect()
                 } else {

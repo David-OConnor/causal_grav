@@ -6,9 +6,9 @@ use lin_alg::f64::Vec3;
 use rayon::prelude::*;
 
 use crate::{
-    gaussian::{GaussianShell, AMP_SCALER},
-    units::{A0_MOND, G},
-    Body, GravShell,
+    grav_shell::{GravShell, AMP_SCALER},
+    units::{A0_MOND, C, G},
+    Body,
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -58,32 +58,33 @@ pub fn calc_acc_shell(
     shell_c: f64,
     softening_factor_sq: f64,
 ) -> Vec3 {
-    let mut result = Vec3::new_zero();
-
     // todo: Once you have more than one body acting on a target, you need to change this, so you get
     // todo exactly 0 or 1 shells per other body.
-    for shell in shells {
-        if shell.emitter_id == id_target {
-            continue;
+
+    // todo: DRY with non-shell.
+    shells.par_iter().filter_map(|shell| {
+        if shell.source_id == id_target {
+            return None; // Skip self-interaction.
         }
 
-        let acc_diff = shell.center - posit;
+        let source_posit = shell.center;
+        let t_since_creation = shell.radius / C;
+        // let source_posit = shell.center +  shell.body_vel * t_since_creation;
+        // let source_posit = shell.center + shell.body_vel * t_since_creation + shell.body_acc / 2. * t_since_creation.powi(2);
+
+        let acc_diff = source_posit - posit;
         let dist = acc_diff.magnitude();
         let acc_dir = acc_diff / dist; // Unit vec
 
-        // todo: Experimenting using our consistent unit system
-        // let mass_kg = shell.src_mass * SOLAR_MASS;
-        // let r_m = r * KPC;
-
-        result += acc_newton_inner(
+        Some(acc_newton_inner(
             acc_dir,
             shell.value(posit, shell_c),
             dist,
             softening_factor_sq,
-        );
-    }
-
-    result * AMP_SCALER
+        ))
+    })
+        .reduce(Vec3::new_zero, |acc, elem| acc + elem) // Sum the contributions.
+    * AMP_SCALER
 }
 
 /// An instantaneous acceleration computation, from all sources, on a single target.

@@ -20,21 +20,6 @@
 
 use lin_alg::f64::Vec3;
 
-// Find a value of C, given spacing and amplitude, that provides a good balance between distribution
-// uniformity, and sharp edges.
-//
-// A higher coefficient results in a more uniform distribution, at the cost of responsiveness at the edges.
-// 0.55: Sharper falloff. 0.6: More uniform distribution.
-
-// pub const MAX_SHELL_R: f64 = 50.; // todo: Adjust this approach A/R.
-pub const MAX_SHELL_R: f64 = 20.; // todo: Adjust this approach A/R.
-
-pub const COEFF_C: f64 = 0.6;
-// pub const COEFF_C: f64 = 0.55;
-
-pub const AMP_SCALER: f64 = 0.6649; // Based on COEFF = 0.6. Found from trial + error using `gauss_spacing.py`.
-                                    // pub const AMP_SCALER: f64 = 0.7253; // Based on COEFF = 0.55. Found from trial + error using `gauss_spacing.py`.
-
 #[derive(Debug)]
 pub struct GaussianShell {
     pub center: Vec3,

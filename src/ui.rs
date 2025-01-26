@@ -155,6 +155,8 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             if ui.button("Save dt").clicked() {
                 if let Ok(v) = state.ui.dt_input.parse() {
                     state.config.dt = v;
+
+                    state.config.refresh_shell_ratio();
                 }
             }
 
@@ -230,11 +232,8 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
                     .filter(|s| s.mesh != 1)
                     .collect();
 
-                let leaves = tree.leaves(
-                    lin_alg::f64::Vec3::new(2., 2., 0.),
-                    99999,
-                    &state.config.bh_config,
-                );
+                let leaves =
+                    tree.leaves(lin_alg::f64::Vec3::new(2., 2., 0.), &state.config.bh_config);
                 println!(
                     "Leaf count: {}. Full tree len: {}",
                     leaves.len(),

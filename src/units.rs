@@ -54,10 +54,8 @@ pub const G: f64 =
 pub const A0_MOND: f64 = 1.2e-10 * KPC_PER_M / (MYR_PER_S * MYR_PER_S); // 3.87e-3
 
 // Note: Setting this too high is problematic.
-// todo: Maybe a different time unit?
-// const C: f64 = 9.72e-12; // Rough; kpc/s^2.
-// const C: f64 = 40.;
-pub const C: f64 = 306.4; // KPC/Myr
+// pub const C: f64 = 306.4; // KPC/Myr
+pub const C: f64 = 5.; // todo: Experimenting
 
 // G_SI × 1/3.0856e16 × c^2 / SOLAR_MASS_INV
 // = 4.45e-3. This checks out. Our approach of using inverses, and preserving multiplication/division order

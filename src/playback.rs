@@ -16,16 +16,16 @@ use bincode::{
 };
 use graphics::Entity;
 use lin_alg::{
-    f32::{Quaternion, Vec3 as Vec3f32},
+    f32::{Quaternion, Vec3 as Vec3f32, FORWARD, UP},
     f64::Vec3,
 };
 
 use crate::{
+    grav_shell::GravShell,
     render::{
-        BODY_COLOR, BODY_SHINYNESS, BODY_SIZE_MAX, BODY_SIZE_MIN, BODY_SIZE_SCALER, MESH_CUBE,
-        MESH_SPHERE, SHELL_COLOR, TREE_COLOR, TREE_CUBE_SCALE_FACTOR, TREE_SHINYNESS,
+        BODY_COLOR, BODY_SHINYNESS, BODY_SIZE_MAX, BODY_SIZE_MIN, BODY_SIZE_SCALER, MESH_ARROW,
+        MESH_CUBE, MESH_SPHERE, SHELL_COLOR, TREE_COLOR, TREE_CUBE_SCALE_FACTOR, TREE_SHINYNESS,
     },
-    GravShell,
 };
 
 #[derive(Debug, Encode, Decode)]
@@ -74,11 +74,10 @@ pub fn vec3_to_f32(v: Vec3) -> Vec3f32 {
 
 /// Body masses are separate from the snapshot, since it's invariant.
 pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_masses: &[f32]) {
-    // todo: Shells A/R
+    // todo: Shells, acc vecs A/R
     *entities = Vec::with_capacity(snapshot.body_posits.len() + snapshot.tree_cubes.len());
 
-    for (i, body_posit_) in snapshot.body_posits.iter().enumerate() {
-        let body_posit = Vec3f32::new(body_posit_.x, body_posit_.y, body_posit_.z);
+    for (i, posit) in snapshot.body_posits.iter().enumerate() {
         // println!("Body mass: {:?}. Scaled size: {:?}", body_masses[i], BODY_SIZE_SCALER * body_masses[i]);
 
         let entity_size = f32::clamp(
@@ -88,9 +87,18 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
         );
         entities.push(Entity::new(
             MESH_SPHERE,
-            body_posit,
+            *posit,
             Quaternion::new_identity(),
             entity_size,
+            BODY_COLOR,
+            BODY_SHINYNESS,
+        ));
+
+        entities.push(Entity::new(
+            MESH_ARROW,
+            *posit,
+            Quaternion::from_unit_vecs(FORWARD, snapshot.body_accs[i].to_normalized()),
+            snapshot.body_accs[i].magnitude() * 0.1,
             BODY_COLOR,
             BODY_SHINYNESS,
         ));

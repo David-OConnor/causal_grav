@@ -34,14 +34,14 @@ impl State {
 
 impl Body {
     /// Generate a ray traveling in a random direction.
-    pub fn create_ray(&self, emitter_id: usize) -> GravRay {
+    pub fn create_ray(&self, source_id: usize) -> GravRay {
         let mut rng = rand::thread_rng();
 
         let unit_vec = util::random_unit_vec(&rng);
 
         let unit_vec = Vec3::new(x, y, z);
         GravRay {
-            emitter_id,
+            source_id: source_id,
             posit: self.posit,
             vel: unit_vec * C,
             src_mass: self.mass,
@@ -55,7 +55,7 @@ fn density_gradient(
     posit: Vec3,
     rays: &[GravRay],
     shells: &[GravShell],
-    emitter_id: usize,
+    source_id: usize,
     dt: f64,
     gauss_c: f64,
 ) -> Vec3 {
@@ -72,12 +72,12 @@ fn density_gradient(
 
     // let properties_this = rect_this.measure_properties(rays);
 
-    let properties_x_prev = rect_x_prev.measure_properties(rays, shells, emitter_id, gauss_c);
-    let properties_x_next = rect_x_next.measure_properties(rays, shells, emitter_id, gauss_c);
-    let properties_y_prev = rect_y_prev.measure_properties(rays, shells, emitter_id, gauss_c);
-    let properties_y_next = rect_y_next.measure_properties(rays, shells, emitter_id, gauss_c);
-    let properties_z_prev = rect_z_prev.measure_properties(rays, shells, emitter_id, gauss_c);
-    let properties_z_next = rect_z_next.measure_properties(rays, shells, emitter_id, gauss_c);
+    let properties_x_prev = rect_x_prev.measure_properties(rays, shells, source_id, gauss_c);
+    let properties_x_next = rect_x_next.measure_properties(rays, shells, source_id, gauss_c);
+    let properties_y_prev = rect_y_prev.measure_properties(rays, shells, source_id, gauss_c);
+    let properties_y_next = rect_y_next.measure_properties(rays, shells, source_id, gauss_c);
+    let properties_z_prev = rect_z_prev.measure_properties(rays, shells, source_id, gauss_c);
+    let properties_z_next = rect_z_next.measure_properties(rays, shells, source_id, gauss_c);
 
     Vec3::new(
         (properties_x_next.ray_density - properties_x_prev.ray_density) / 2.,
@@ -115,7 +115,7 @@ impl SampleRect {
         &self,
         rays: &[GravRay],
         shells: &[GravShell],
-        emitter_id: usize,
+        source_id: usize,
         shell_c: f64,
     ) -> SampleProperties {
         let volume = {
@@ -131,7 +131,7 @@ impl SampleRect {
 
         for ray in rays {
             // A method to avoid self-interaction.
-            if ray.emitter_id == emitter_id {
+            if ray.source_id == source_id {
                 continue;
             }
 
@@ -160,7 +160,7 @@ impl SampleRect {
         // let mut shell_inner = None;
         // let mut shell_outer = None;
 
-        let acc_shell = accel::calc_acc_shell(shells, sample_center, emitter_id, shell_c);
+        let acc_shell = accel::calc_acc_shell(shells, sample_center, source_id, shell_c);
 
         // todo: To calculate div and curl, we need multiple sets of rays.
 
@@ -178,7 +178,7 @@ impl SampleRect {
 /// Our model "particle" that travels outward from a source
 struct GravRay {
     /// A quick and dirty way to prevent a body from interacting with itself.
-    emitter_id: usize,
+    source_id: usize,
     posit: Vec3,
     /// The magnitude corresponds to source mass. Direction is outward
     /// at any angle from the source.
@@ -241,13 +241,13 @@ pub fn acc_rays(
     body: &mut Body,
     rays: &[GravRay],
     shells: &[GravShell],
-    emitter_id: usize,
+    source_id: usize,
     shell_c: f64,
 ) -> Vec3 {
     // let ray_density_grad = density_gradient(body.posit, rays);
 
     let rect = SampleRect::new(body.posit, RAY_SAMPLE_WIDTH);
-    let properties = rect.measure_properties(rays, shells, emitter_id, shell_c);
+    let properties = rect.measure_properties(rays, shells, source_id, shell_c);
 
     // println!("Prop: {:?}", properties);
 

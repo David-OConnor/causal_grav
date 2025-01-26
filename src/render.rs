@@ -37,6 +37,7 @@ pub const TREE_CUBE_SCALE_FACTOR: f32 = 0.85;
 // Keep this in sync with mesh init.
 pub const MESH_SPHERE: usize = 0;
 pub const MESH_CUBE: usize = 1;
+pub const MESH_ARROW: usize = 2;
 
 pub const SHELL_OPACITY: f32 = 0.01;
 
@@ -60,7 +61,7 @@ pub fn render(state: State) {
         meshes: vec![
             Mesh::new_sphere(1., 12, 12),
             Mesh::new_box(1., 1., 1.),
-            // todo: Mesh for partial sphere.
+            Mesh::new_arrow(1., 0.05, 8),
         ],
         entities: Vec::new(), // updated below.
         camera: Camera {
