@@ -355,6 +355,7 @@ version = "0.1.0"
 dependencies = [
  "barnes_hut",
  "bincode",
+ "cuda_setup",
  "cudarc",
  "egui",
  "graphics",
@@ -568,6 +569,12 @@ name = "crunchy"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
+
+[[package]]
+name = "cuda_setup"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75052c5021985301f9bcf1ae6e8498c03149410c40db332854f8b2ac60099380"
 
 [[package]]
 name = "cudarc"

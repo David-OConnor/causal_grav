@@ -5,7 +5,8 @@ use std::{sync::Arc, time::Instant};
 use cudarc::driver::{CudaDevice, CudaSlice, LaunchAsync, LaunchConfig};
 use lin_alg::f64::Vec3;
 
-type FDev = f32; // This makes switching between f32 and f64 easier.
+// The floating point type used on the device. This makes switching between f32 and f64 easier.
+type FDev = f32;
 
 /// Convert a collection of `Vec3`s into Cuda arrays of their components.
 fn alloc_vec3s(dev: &Arc<CudaDevice>, data: &[Vec3]) -> CudaSlice<FDev> {

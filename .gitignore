@@ -4,15 +4,15 @@ Cargo.lock
 # IDE
 *.iws
 
+# CUDA
+*.exe
+*.exp
+*.lib
+*.ptx
+
 # Snapshots and save files.
 *.grav
 # Plots
 *.png
 
 /plots/
-
-# CUDA
-*.exe
-*.exp
-*.lib
-*.ptx

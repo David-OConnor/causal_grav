@@ -104,12 +104,10 @@ pub struct Config {
     dynamic_dt_scaler: f64,
     shell_creation_ratio: usize,
     // num_rays_per_iter: usize,
-    gauss_c: f64,
+    // /// Width for our shells. Not set directly; fn of dt and shell ratio.
+    // gauss_c: f64,
     num_bodies_disk: usize, // todo: You may, in the future, not make this a constant.
     num_bodies_bulge: usize, // todo: You may, in the future, not make this a constant.
-    /// When placing bodies.
-    // num_rings_disk: usize, // todo: You may, in the future, not make this a constant.
-    // num_rings_bulge: usize, // todo: You may, in the future, not make this a constant.
     softening_factor_sq: f64,
     snapshot_ratio: usize,
     bh_config: BhConfig,
@@ -128,7 +126,7 @@ impl Default for Config {
         let num_bodies_disk = 600;
         let num_bodies_bulge = 100;
 
-        let mut result = Self {
+        Self {
             num_timesteps: 5_000,
             shell_creation_ratio: 1,
             // shell_creation_ratio: 12,
@@ -137,11 +135,10 @@ impl Default for Config {
             // dynamic_dt_scaler: 0.01,
             dynamic_dt_scaler: 0.1, // not used.
             // num_rays_per_iter: 200,
-            gauss_c,
+            // gauss_c: 0., // Updated below
             num_bodies_disk,
             num_bodies_bulge,
-            softening_factor_sq: 0.0001,
-            // softening_factor_sq: 0.05,
+            softening_factor_sq: 1e-6,
             snapshot_ratio: 8,
             bh_config: BhConfig {
                 // θ: 0.4,
@@ -149,10 +146,7 @@ impl Default for Config {
             },
             v_scaler: 1.0,
             skip_tree: false,
-        };
-
-        result.refresh_shell_ratio();
-        result
+        }
     }
 }
 
@@ -162,11 +156,11 @@ impl Config {
         util::load(path)
     }
 
-    /// Run this whne dt, or shell creation ratio changes, to update the Gaussian width.
-    pub fn refresh_shell_ratio(&mut self) {
+    /// Width for our shells; sets the gaussian C parameter.
+    pub fn shell_gauss_c(&self) -> f64 {
         // In distance: t * d/t = d.
         let shell_spacing = self.dt * self.shell_creation_ratio as f64 * C;
-        self.gauss_c = shell_spacing * COEFF_C;
+        shell_spacing * COEFF_C
     }
 }
 
@@ -340,6 +334,8 @@ fn build(state: &mut State, force_model: ForceModel) {
     // todo: Make a guess at capacity based on bodies.
     // let mut nodes = Vec::with_capacity(69);
 
+    let gauss_c = state.config.shell_gauss_c();
+
     for t in 0..state.config.num_timesteps {
         if force_model == ForceModel::GaussShells && t % state.config.shell_creation_ratio == 0 {
             state.remove_far_shells(); // Note grouped above due to a borrow problem.
@@ -437,7 +433,7 @@ fn build(state: &mut State, force_model: ForceModel) {
                 &state.shells,
                 posit_target,
                 id_target,
-                cfg.gauss_c,
+                gauss_c,
                 cfg.softening_factor_sq,
             ),
             ForceModel::Mond(mond_fn) => {
@@ -541,7 +537,6 @@ fn main() {
     let mut state = State::default();
     if let Ok(cfg) = util::load(&PathBuf::from_str(SAVE_FILE).unwrap()) {
         state.config = cfg;
-        println!("V scaler loaded: {:?}", state.config.v_scaler);
     }
 
     state.ui.dt_input = state.config.dt.to_string();

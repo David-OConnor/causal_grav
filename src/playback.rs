@@ -27,6 +27,7 @@ use crate::{
         MESH_CUBE, MESH_SPHERE, SHELL_COLOR, TREE_COLOR, TREE_CUBE_SCALE_FACTOR, TREE_SHINYNESS,
     },
 };
+use crate::render::{ARROW_COLOR, ARROW_SHINYNESS};
 
 #[derive(Debug, Encode, Decode)]
 /// A compact version
@@ -98,9 +99,9 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
             MESH_ARROW,
             *posit,
             Quaternion::from_unit_vecs(FORWARD, snapshot.body_accs[i].to_normalized()),
-            snapshot.body_accs[i].magnitude() * 0.1,
-            BODY_COLOR,
-            BODY_SHINYNESS,
+            snapshot.body_accs[i].magnitude() * 0.2,
+            ARROW_COLOR,
+            ARROW_SHINYNESS,
         ));
     }
 

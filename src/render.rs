@@ -2,9 +2,8 @@
 
 use std::f32::consts::TAU;
 
-use egui::Color32;
 use graphics::{
-    Camera, ControlScheme, DeviceEvent, EngineUpdates, Entity, InputSettings, LightType, Lighting,
+    Camera, ControlScheme, DeviceEvent, EngineUpdates, InputSettings, LightType, Lighting,
     Mesh, PointLight, Scene, UiLayout, UiSettings,
 };
 use lin_alg::f32::{Quaternion, Vec3};
@@ -25,11 +24,16 @@ pub const BODY_SIZE_MIN: f32 = 0.01;
 pub const BODY_SIZE_MAX: f32 = 0.6;
 
 pub const BODY_COLOR: Color = (1.0, 0.4, 0.4);
-pub const SHELL_COLOR: Color = (1.0, 0.6, 0.2);
-pub const TREE_COLOR: Color = (0.4, 0.4, 1.0);
 pub const BODY_SHINYNESS: f32 = 2.;
+
+pub const SHELL_COLOR: Color = (1.0, 0.6, 0.2);
 pub const SHELL_SHINYNESS: f32 = 2.;
+
+pub const TREE_COLOR: Color = (0.4, 0.4, 1.0);
 pub const TREE_SHINYNESS: f32 = 1.;
+
+pub const ARROW_COLOR: Color = (0.2, 1.0, 0.6);
+pub const ARROW_SHINYNESS: f32 = 1.;
 
 // Allows individual cubes to be distinguished by creating gaps between them.
 pub const TREE_CUBE_SCALE_FACTOR: f32 = 0.85;
@@ -57,13 +61,21 @@ fn render_handler(_state: &mut State, _scene: &mut Scene, _dt: f32) -> EngineUpd
 
 /// Entry point to our render and event loop.
 pub fn render(state: State) {
-    let mut scene = Scene {
+    // Initialize entities.
+    let mut entities = Vec::new();
+    change_snapshot(
+        &mut entities,
+        &state.snapshots[state.ui.snapshot_selected],
+        &state.body_masses,
+    );
+
+    let scene = Scene {
         meshes: vec![
             Mesh::new_sphere(1., 12, 12),
             Mesh::new_box(1., 1., 1.),
             Mesh::new_arrow(1., 0.05, 8),
         ],
-        entities: Vec::new(), // updated below.
+        entities,
         camera: Camera {
             fov_y: TAU / 8.,
             position: Vec3::new(0., 0., -60.),
@@ -104,21 +116,13 @@ pub fn render(state: State) {
 
     let input_settings = InputSettings {
         initial_controls: ControlScheme::FreeCamera,
+        move_sens: 3.5,
         ..Default::default()
     };
     let ui_settings = UiSettings {
         layout: UiLayout::Top,
         icon_path: Some("./resources/icon.png".to_owned()),
     };
-
-    // Initialize entities.
-    if !state.snapshots.is_empty() {
-        change_snapshot(
-            &mut scene.entities,
-            &state.snapshots[state.ui.snapshot_selected],
-            &state.body_masses,
-        )
-    }
 
     graphics::run(
         state,

@@ -18,7 +18,7 @@ barnes_hut = { path = "../barnes_hut", features = ["encode"]}
 rand = "^0.8.5"
 
 plotters = "^0.3.7"  # For 2d plots
-# For saving and loading snapshots.
+# For saving and loading snapshots and config.
 bincode = "^2.0.0-rc.3"
 
 rayon = "^1.10.0"  # Parallel execution on CPU using thread pools.
@@ -26,9 +26,11 @@ rayon = "^1.10.0"  # Parallel execution on CPU using thread pools.
 # Keep this cuda version in sync with what you have installed on the system.
 cudarc = { version = "^0.13.3", optional=true, features=["cuda-12060"] }
 
+[build-dependencies]
+cuda_setup = { version = "0.1.0", optional = true }
+
 
 # We feature-gate the CUDA dependency, so this program can be run on computers that don't have a
 # suitable graphics chip.
 [features]
-default = []
-cuda = ["cudarc"]
+cuda = ["cudarc", "cuda_setup"]

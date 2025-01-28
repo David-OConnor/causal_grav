@@ -155,8 +155,6 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             if ui.button("Save dt").clicked() {
                 if let Ok(v) = state.ui.dt_input.parse() {
                     state.config.dt = v;
-
-                    state.config.refresh_shell_ratio();
                 }
             }
 

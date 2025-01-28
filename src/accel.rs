@@ -69,7 +69,7 @@ pub fn calc_acc_shell(
 
         let source_posit = shell.center;
         let t_since_creation = shell.radius / C;
-        // let source_posit = shell.center +  shell.body_vel * t_since_creation;
+
         // let source_posit = shell.center + shell.body_vel * t_since_creation + shell.body_acc / 2. * t_since_creation.powi(2);
 
         let acc_diff = source_posit - posit;
