@@ -15,7 +15,9 @@ barnes_hut = { path = "../barnes_hut", features = ["encode"]}
 #kifmm = { git = "https://github.com/bempp/kifmm/" }
 #kifmm = { version = "^2.0.0" }
 
-rand = "^0.8.5"
+gravity = { path = "../Labs/gravity" }  # General relativity
+
+rand = "^0.9.0"
 
 plotters = "^0.3.7"  # For 2d plots
 # For saving and loading snapshots and config.

@@ -14,9 +14,9 @@ use bincode::{
     error::{DecodeError, EncodeError},
     Decode, Encode,
 };
-use graphics::Entity;
+use graphics::{Entity, UP_VEC};
 use lin_alg::{
-    f32::{Quaternion, Vec3 as Vec3f32, FORWARD, UP},
+    f32::{Quaternion, Vec3 as Vec3f32},
     f64::Vec3,
 };
 
@@ -79,8 +79,6 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
     *entities = Vec::with_capacity(snapshot.body_posits.len() + snapshot.tree_cubes.len());
 
     for (i, posit) in snapshot.body_posits.iter().enumerate() {
-        // println!("Body mass: {:?}. Scaled size: {:?}", body_masses[i], BODY_SIZE_SCALER * body_masses[i]);
-
         let entity_size = f32::clamp(
             BODY_SIZE_SCALER * body_masses[i],
             BODY_SIZE_MIN,
@@ -98,7 +96,7 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
         entities.push(Entity::new(
             MESH_ARROW,
             *posit,
-            Quaternion::from_unit_vecs(FORWARD, snapshot.body_accs[i].to_normalized()),
+            Quaternion::from_unit_vecs(UP_VEC, snapshot.body_accs[i].to_normalized()),
             snapshot.body_accs[i].magnitude() * 0.2,
             ARROW_COLOR,
             ARROW_SHINYNESS,

@@ -49,6 +49,7 @@ mod render;
 mod ui;
 mod units;
 mod util;
+mod ray_bending;
 // todo: Try a Galaxy filament simulation; large scale CDM theory. Can we get filaments without CDM?
 // todo: - try an earth-perspective visualization and analysis. From the perspective of earth, validate these
 // todo galaxies vs the images we get.
@@ -86,8 +87,9 @@ const DEFAULT_SNAPSHOT_FILE: &str = "snapshot.grav";
 const DISK_RING_PORTION: usize = 10;
 const BULGE_RING_PORTION: usize = 5;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum ComputationDevice {
+    #[default]
     Cpu,
     #[cfg(feature = "cuda")]
     Gpu(Arc<CudaDevice>),

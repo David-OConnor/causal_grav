@@ -4,7 +4,7 @@ use std::f32::consts::TAU;
 
 use graphics::{
     Camera, ControlScheme, DeviceEvent, EngineUpdates, InputSettings, LightType, Lighting,
-    Mesh, PointLight, Scene, UiLayout, UiSettings,
+    Mesh, PointLight, Scene, UiLayout, UiSettings, RIGHT_VEC
 };
 use lin_alg::f32::{Quaternion, Vec3};
 
@@ -81,8 +81,8 @@ pub fn render(state: State) {
             position: Vec3::new(0., 0., -60.),
             far: RENDER_DIST,
             near: 0.2, // todo: Adjust A/R
-            // orientation: Quaternion::from_axis_angle(Vec3::new(1., 0., 0.), TAU / 16.),
-            orientation: Quaternion::from_axis_angle(Vec3::new(1., 0., 0.), 0.),
+            // orientation: Quaternion::from_axis_angle(RIGHT_VEC, TAU / 16.),
+            orientation: Quaternion::from_axis_angle(RIGHT_VEC, 0.),
             ..Default::default()
         },
         lighting: Lighting {
