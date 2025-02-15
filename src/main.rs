@@ -25,7 +25,7 @@ use crate::{
     gaussian::GaussianShell,
     grav_shell::COEFF_C,
     integrate::integrate_rk4,
-    playback::{vec3_to_f32, GravShellSnapshot, SnapShot},
+    playback::{GravShellSnapshot, SnapShot},
     render::render,
     units::{A0_MOND, C},
 };
@@ -252,8 +252,8 @@ impl State {
     fn take_snapshot(&mut self, dt: f64, tree_nodes: Vec<Cube>) {
         self.snapshots.push(SnapShot {
             time: self.time_elapsed as f32,
-            body_posits: self.bodies.iter().map(|b| vec3_to_f32(b.posit)).collect(),
-            body_accs: self.bodies.iter().map(|b| vec3_to_f32(b.accel)).collect(),
+            body_posits: self.bodies.iter().map(|b| b.posit.into()).collect(),
+            body_accs: self.bodies.iter().map(|b| b.accel.into()).collect(),
             shells: self.shells.iter().map(GravShellSnapshot::new).collect(),
             dt: dt as f32,
             tree_cubes: tree_nodes,

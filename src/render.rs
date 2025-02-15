@@ -6,6 +6,7 @@ use graphics::{
     Camera, ControlScheme, DeviceEvent, EngineUpdates, InputSettings, LightType, Lighting,
     Mesh, PointLight, Scene, UiLayout, UiSettings, RIGHT_VEC
 };
+use graphics::event::WindowEvent;
 use lin_alg::f32::{Quaternion, Vec3};
 
 use crate::{playback::change_snapshot, ui::ui_handler, State};
@@ -45,9 +46,18 @@ pub const MESH_ARROW: usize = 2;
 
 pub const SHELL_OPACITY: f32 = 0.01;
 
-fn event_handler(
+fn event_dev_handler(
     _state: &mut State,
     _event: DeviceEvent,
+    _scene: &mut Scene,
+    _dt: f32,
+) -> EngineUpdates {
+    EngineUpdates::default()
+}
+
+fn event_win_handler(
+    _state: &mut State,
+    _event: WindowEvent,
     _scene: &mut Scene,
     _dt: f32,
 ) -> EngineUpdates {
@@ -130,7 +140,8 @@ pub fn render(state: State) {
         input_settings,
         ui_settings,
         render_handler,
-        event_handler,
+        event_dev_handler,
+        event_win_handler,
         ui_handler,
     );
 }

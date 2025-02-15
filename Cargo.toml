@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 graphics = { path = "../graphics" }
-egui = "^0.30.0"
+egui = "^0.31.0"
 
 #lin_alg = "^1.0.4"
 lin_alg = { path = "../lin_alg", features = ["encode"] }

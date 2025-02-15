@@ -40,7 +40,7 @@ pub struct GravShellSnapshot {
 impl GravShellSnapshot {
     pub fn new(shell: &GravShell) -> Self {
         Self {
-            center: vec3_to_f32(shell.center),
+            center: shell.center.into(),
             radius: shell.radius as f32,
             src_mass: shell.src_mass as f32,
         }
@@ -63,14 +63,6 @@ pub struct SnapShot {
     pub shells: Vec<GravShellSnapshot>,
     pub dt: f32,
     pub tree_cubes: Vec<Cube>, // todo: Custom type type f32, as above.
-}
-
-pub fn vec3_to_f32(v: Vec3) -> Vec3f32 {
-    Vec3f32 {
-        x: v.x as f32,
-        y: v.y as f32,
-        z: v.z as f32,
-    }
 }
 
 /// Body masses are separate from the snapshot, since it's invariant.
