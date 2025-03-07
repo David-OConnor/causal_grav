@@ -422,9 +422,8 @@ fn build(state: &mut State, force_model: ForceModel) {
                         )
                     };
 
-                    barnes_hut::acc_bh(
+                    barnes_hut::run_bh(
                         posit_target,
-                        1., // We use this for acceleration; mass tgt cancels.
                         id_target,
                         tree.as_ref().unwrap(),
                         &cfg.bh_config,
@@ -459,9 +458,8 @@ fn build(state: &mut State, force_model: ForceModel) {
                         )
                     };
 
-                    barnes_hut::acc_bh(
+                    barnes_hut::run_bh(
                         posit_target,
-                        1., // We use this for acceleration; mass tgt cancels.
                         id_target,
                         tree.as_ref().unwrap(),
                         &cfg.bh_config,
