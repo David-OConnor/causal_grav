@@ -2,10 +2,7 @@
 
 use std::f32::consts::TAU;
 
-use graphics::{
-    Camera, ControlScheme, DeviceEvent, EngineUpdates, InputSettings, LightType, Lighting,
-    Mesh, PointLight, Scene, UiLayout, UiSettings, RIGHT_VEC
-};
+use graphics::{Camera, ControlScheme, DeviceEvent, EngineUpdates, GraphicsSettings, InputSettings, LightType, Lighting, Mesh, PointLight, Scene, UiLayout, UiSettings, RIGHT_VEC};
 use graphics::event::WindowEvent;
 use lin_alg::f32::{Quaternion, Vec3};
 
@@ -50,6 +47,7 @@ fn event_dev_handler(
     _state: &mut State,
     _event: DeviceEvent,
     _scene: &mut Scene,
+    _engine_inputs: bool,
     _dt: f32,
 ) -> EngineUpdates {
     EngineUpdates::default()
@@ -81,7 +79,7 @@ pub fn render(state: State) {
 
     let scene = Scene {
         meshes: vec![
-            Mesh::new_sphere(1., 12, 12),
+            Mesh::new_sphere(1., 2),
             Mesh::new_box(1., 1., 1.),
             Mesh::new_arrow(1., 0.05, 8),
         ],
@@ -119,13 +117,14 @@ pub fn render(state: State) {
                 },
             ],
         },
+        input_settings: Default::default(),
         background_color: BACKGROUND_COLOR,
         window_size: (WINDOW_SIZE_X, WINDOW_SIZE_Y),
         window_title: WINDOW_TITLE.to_owned(),
     };
 
     let input_settings = InputSettings {
-        initial_controls: ControlScheme::FreeCamera,
+        control_scheme: ControlScheme::FreeCamera,
         move_sens: 3.5,
         ..Default::default()
     };
@@ -137,8 +136,8 @@ pub fn render(state: State) {
     graphics::run(
         state,
         scene,
-        input_settings,
         ui_settings,
+        GraphicsSettings::default(),
         render_handler,
         event_dev_handler,
         event_win_handler,

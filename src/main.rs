@@ -412,10 +412,10 @@ fn build(state: &mut State, force_model: ForceModel) {
                         cfg.softening_factor_sq,
                     )
                 } else {
-                    let acc_fn = |acc_dir, mass, dist| {
+                    let acc_fn = |acc_dir, mass_src, mass_tgt, dist| {
                         acc_newton_inner_with_mond(
                             acc_dir,
-                            mass,
+                            mass_src,
                             dist,
                             None,
                             cfg.softening_factor_sq,
@@ -424,6 +424,7 @@ fn build(state: &mut State, force_model: ForceModel) {
 
                     barnes_hut::acc_bh(
                         posit_target,
+                        1., // We use this for acceleration; mass tgt cancels.
                         id_target,
                         tree.as_ref().unwrap(),
                         &cfg.bh_config,
@@ -448,10 +449,10 @@ fn build(state: &mut State, force_model: ForceModel) {
                         cfg.softening_factor_sq,
                     )
                 } else {
-                    let acc_fn = |acc_dir, mass, dist| {
+                    let acc_fn = |acc_dir, mass_src, mass_tgt, dist| {
                         acc_newton_inner_with_mond(
                             acc_dir,
-                            mass,
+                            mass_src,
                             dist,
                             Some(mond_fn),
                             cfg.softening_factor_sq,
@@ -460,6 +461,7 @@ fn build(state: &mut State, force_model: ForceModel) {
 
                     barnes_hut::acc_bh(
                         posit_target,
+                        1., // We use this for acceleration; mass tgt cancels.
                         id_target,
                         tree.as_ref().unwrap(),
                         &cfg.bh_config,

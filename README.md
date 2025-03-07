@@ -43,6 +43,9 @@ GR effect to look into:
  - Another paper from 2021 on Gravitoelectromagnetism: https://arxiv.org/pdf/2109.00357
 
 
+*Do we need to keep all state relative to other bodies, or to various points in spacetime, vice
+absolute?*
+
 Another possibility: Self-interactions of the gravity field, and similar
 
 
