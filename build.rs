@@ -3,8 +3,10 @@
 #[cfg(feature = "cuda")]
 use cuda_setup::{build, GpuArchitecture};
 
-
 fn main() {
     #[cfg(feature = "cuda")]
-    build(GpuArchitecture::Rtx4, &vec!["src/cuda/cuda.cu", "src/cuda/util.cu"]);
+    build(
+        GpuArchitecture::Rtx4,
+        &vec!["src/cuda/cuda.cu", "src/cuda/util.cu"],
+    );
 }

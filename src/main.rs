@@ -45,11 +45,11 @@ mod image_parsing;
 mod integrate;
 mod playback;
 mod properties;
+mod ray_bending;
 mod render;
 mod ui;
 mod units;
 mod util;
-mod ray_bending;
 // todo: Try a Galaxy filament simulation; large scale CDM theory. Can we get filaments without CDM?
 // todo: - try an earth-perspective visualization and analysis. From the perspective of earth, validate these
 // todo galaxies vs the images we get.
@@ -412,7 +412,7 @@ fn build(state: &mut State, force_model: ForceModel) {
                         cfg.softening_factor_sq,
                     )
                 } else {
-                    let acc_fn = |acc_dir, mass_src, mass_tgt, dist| {
+                    let acc_fn = |acc_dir, mass_src, dist| {
                         acc_newton_inner_with_mond(
                             acc_dir,
                             mass_src,
@@ -448,7 +448,7 @@ fn build(state: &mut State, force_model: ForceModel) {
                         cfg.softening_factor_sq,
                     )
                 } else {
-                    let acc_fn = |acc_dir, mass_src, mass_tgt, dist| {
+                    let acc_fn = |acc_dir, mass_src, dist| {
                         acc_newton_inner_with_mond(
                             acc_dir,
                             mass_src,

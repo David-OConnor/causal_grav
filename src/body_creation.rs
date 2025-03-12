@@ -95,7 +95,7 @@ impl GalaxyDescrip {
         let m = 1e14;
         let v_mag = v_scaler;
 
-        let two_body = true;
+        let two_body = false;
 
         if two_body {
             // todo: Solve the jitter at low v with tree.

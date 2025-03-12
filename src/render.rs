@@ -2,8 +2,10 @@
 
 use std::f32::consts::TAU;
 
-use graphics::{Camera, ControlScheme, DeviceEvent, EngineUpdates, GraphicsSettings, InputSettings, LightType, Lighting, Mesh, PointLight, Scene, UiLayout, UiSettings, RIGHT_VEC};
-use graphics::event::WindowEvent;
+use graphics::{
+    event::WindowEvent, Camera, ControlScheme, DeviceEvent, EngineUpdates, GraphicsSettings,
+    InputSettings, LightType, Lighting, Mesh, PointLight, Scene, UiLayout, UiSettings, RIGHT_VEC,
+};
 use lin_alg::f32::{Quaternion, Vec3};
 
 use crate::{playback::change_snapshot, ui::ui_handler, State};

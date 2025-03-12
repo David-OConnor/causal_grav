@@ -1481,7 +1481,7 @@ dependencies = [
 
 [[package]]
 name = "lin_alg"
-version = "1.0.8"
+version = "1.1.0"
 dependencies = [
  "bincode",
  "num-traits",
