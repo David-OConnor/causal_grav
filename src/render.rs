@@ -88,7 +88,7 @@ pub fn render(state: State) {
         entities,
         camera: Camera {
             fov_y: TAU / 8.,
-            position: Vec3::new(0., 0., -60.),
+            position: Vec3::new(0., 0., -20.),
             far: RENDER_DIST,
             near: 0.2, // todo: Adjust A/R
             // orientation: Quaternion::from_axis_angle(RIGHT_VEC, TAU / 16.),

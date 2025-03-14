@@ -22,6 +22,7 @@ use rayon::prelude::*;
 use crate::{
     accel::{acc_newton_inner_with_mond, MondFn},
     body_creation::GalaxyDescrip,
+    charge::force_coulomb,
     gaussian::GaussianShell,
     grav_shell::COEFF_C,
     integrate::integrate_rk4,
@@ -35,6 +36,7 @@ mod body_creation;
 mod cdm;
 mod fluid_dynamics;
 // mod fmm_gpt;
+mod charge;
 mod galaxy_data;
 mod gaussian;
 mod gem;
@@ -141,7 +143,7 @@ impl Default for Config {
             num_bodies_disk,
             num_bodies_bulge,
             softening_factor_sq: 1e-6,
-            snapshot_ratio: 8,
+            snapshot_ratio: 2,
             bh_config: BhConfig {
                 // θ: 0.4,
                 ..Default::default()
@@ -220,15 +222,21 @@ struct State {
     /// For rendering; separate from snapshots since it's invariant.
     body_masses: Vec<f32>,
     time_elapsed: f64,
+    charge_mode: bool, // Likely temporary.
 }
 
 impl State {
     fn refresh_bodies(&mut self) {
-        self.bodies = self.ui.galaxy_descrip.make_bodies(
-            self.config.num_bodies_disk,
-            self.config.num_bodies_bulge,
-            self.config.v_scaler,
-        );
+        if self.charge_mode {
+            self.bodies = charge::make_particles();
+        } else {
+            self.bodies = self.ui.galaxy_descrip.make_bodies(
+                self.config.num_bodies_disk,
+                self.config.num_bodies_bulge,
+                self.config.v_scaler,
+            );
+        }
+
         self.body_masses = self.bodies.iter().map(|b| b.mass as f32).collect();
 
         self.time_elapsed = 0.;
@@ -240,9 +248,9 @@ impl State {
 
         let rotation_curve = properties::rotation_curve(&self.bodies, Vec3::new_zero(), C);
         let mass_density = properties::mass_density(&self.bodies, Vec3::new_zero());
-
         properties::plot_rotation_curve(&rotation_curve, &self.ui.galaxy_model.to_str());
-        properties::plot_mass_density(&mass_density, &self.ui.galaxy_model.to_str());
+        // todo: Temp rm; freeze.
+        // properties::plot_mass_density(&mass_density, &self.ui.galaxy_model.to_str());
     }
 
     fn remove_far_shells(&mut self) {
@@ -263,12 +271,10 @@ impl State {
 
 #[derive(Clone, Debug)]
 struct Body {
-    posit: Vec3,
-    vel: Vec3,
-    accel: Vec3,
-    mass: f64,
-    // /// We use this for debugging, testing etc. It goes in the snapshots.
-    // V_source: Vec3,
+    pub posit: Vec3,
+    pub vel: Vec3,
+    pub accel: Vec3,
+    pub mass: f64,
 }
 
 impl Body {
@@ -376,7 +382,7 @@ fn build(state: &mut State, force_model: ForceModel) {
         }
 
         let mut tree = None;
-        if force_model != ForceModel::GaussShells && !cfg.skip_tree {
+        if state.charge_mode || (force_model != ForceModel::GaussShells && !cfg.skip_tree) {
             tree = Some(Tree::new(&state.bodies, &bb, &cfg.bh_config));
         }
 
@@ -401,70 +407,113 @@ fn build(state: &mut State, force_model: ForceModel) {
         };
 
         // This acceleration function acts on a target id and position.
-        let acc = |id_target, posit_target| match force_model {
-            ForceModel::Newton => {
-                if cfg.skip_tree {
-                    accel::acc_newton(
-                        posit_target,
-                        id_target,
-                        &bodies_other.as_ref().unwrap(),
-                        None,
-                        cfg.softening_factor_sq,
-                    )
+        // (q_target here is only used for charge mode; discarded for grav)
+        let acc = |id_target, posit_target, q_target| {
+            if state.charge_mode {
+                // todo: For now, no elec-elec interaction
+                if id_target == 999999999 {
+                    // todo: Implicit nuc for now; N/A.
+                    Vec3::new_zero() // NO nucleus movement
                 } else {
-                    let acc_fn = |acc_dir, mass_src, dist| {
-                        acc_newton_inner_with_mond(
-                            acc_dir,
-                            mass_src,
-                            dist,
-                            None,
-                            cfg.softening_factor_sq,
-                        )
-                    };
+                    let posit_src = Vec3::new_zero();
+                    let q_src = 1.;
 
-                    barnes_hut::run_bh(
-                        posit_target,
-                        id_target,
-                        tree.as_ref().unwrap(),
-                        &cfg.bh_config,
-                        &acc_fn,
-                    )
+                    let acc_diff = posit_src - posit_target;
+                    let dist = acc_diff.magnitude();
+
+                    let acc_dir = acc_diff / dist; // Unit vec
+
+                    let f = force_coulomb(acc_dir, q_src, q_target, dist, cfg.softening_factor_sq);
+
+                    // todo: Arbitrary inertial mass for now. It is not even meaningful or is it?
+                    f / 1.
                 }
-            }
-            ForceModel::GaussShells => accel::calc_acc_shell(
-                &state.shells,
-                posit_target,
-                id_target,
-                gauss_c,
-                cfg.softening_factor_sq,
-            ),
-            ForceModel::Mond(mond_fn) => {
-                if cfg.skip_tree {
-                    accel::acc_newton(
-                        posit_target,
-                        id_target,
-                        &bodies_other.as_ref().unwrap(),
-                        Some(mond_fn),
-                        cfg.softening_factor_sq,
-                    )
-                } else {
-                    let acc_fn = |acc_dir, mass_src, dist| {
-                        acc_newton_inner_with_mond(
-                            acc_dir,
-                            mass_src,
-                            dist,
-                            Some(mond_fn),
-                            cfg.softening_factor_sq,
-                        )
-                    };
 
-                    barnes_hut::run_bh(
+                //
+                // let acc_fn = |acc_dir, q_src, dist| {
+                //     force_coulomb(
+                //         acc_dir,
+                //         q_src,
+                //         q_target,
+                //         dist,
+                //         cfg.softening_factor_sq,
+                //     )
+                // };
+                //
+                // barnes_hut::run_bh(
+                //     posit_target,
+                //     id_target,
+                //     tree.as_ref().unwrap(),
+                //     &cfg.bh_config,
+                //     &acc_fn,
+                // )
+            } else {
+                match force_model {
+                    ForceModel::Newton => {
+                        if cfg.skip_tree {
+                            accel::acc_newton(
+                                posit_target,
+                                id_target,
+                                &bodies_other.as_ref().unwrap(),
+                                None,
+                                cfg.softening_factor_sq,
+                            )
+                        } else {
+                            let acc_fn = |acc_dir, mass_src, dist| {
+                                acc_newton_inner_with_mond(
+                                    acc_dir,
+                                    mass_src,
+                                    dist,
+                                    None,
+                                    cfg.softening_factor_sq,
+                                )
+                            };
+
+                            barnes_hut::run_bh(
+                                posit_target,
+                                id_target,
+                                tree.as_ref().unwrap(),
+                                &cfg.bh_config,
+                                &acc_fn,
+                            )
+                        }
+                    }
+                    ForceModel::GaussShells => accel::calc_acc_shell(
+                        &state.shells,
                         posit_target,
                         id_target,
-                        tree.as_ref().unwrap(),
-                        &cfg.bh_config,
-                        &acc_fn,
-                    )
+                        gauss_c,
+                        cfg.softening_factor_sq,
+                    ),
+                    ForceModel::Mond(mond_fn) => {
+                        if cfg.skip_tree {
+                            accel::acc_newton(
+                                posit_target,
+                                id_target,
+                                &bodies_other.as_ref().unwrap(),
+                                Some(mond_fn),
+                                cfg.softening_factor_sq,
+                            )
+                        } else {
+                            let acc_fn = |acc_dir, mass_src, dist| {
+                                acc_newton_inner_with_mond(
+                                    acc_dir,
+                                    mass_src,
+                                    dist,
+                                    Some(mond_fn),
+                                    cfg.softening_factor_sq,
+                                )
+                            };
+
+                            barnes_hut::run_bh(
+                                posit_target,
+                                id_target,
+                                tree.as_ref().unwrap(),
+                                &cfg.bh_config,
+                                &acc_fn,
+                            )
+                        }
+                    }
                 }
             }
         };
@@ -540,6 +589,8 @@ fn main() {
     if let Ok(cfg) = util::load(&PathBuf::from_str(SAVE_FILE).unwrap()) {
         state.config = cfg;
     }
+
+    state.charge_mode = true;
 
     state.ui.dt_input = state.config.dt.to_string();
     state.ui.θ_input = state.config.bh_config.θ.to_string();

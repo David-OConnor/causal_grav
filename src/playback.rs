@@ -85,14 +85,14 @@ pub fn change_snapshot(entities: &mut Vec<Entity>, snapshot: &SnapShot, body_mas
             BODY_SHINYNESS,
         ));
 
-        entities.push(Entity::new(
-            MESH_ARROW,
-            *posit,
-            Quaternion::from_unit_vecs(UP_VEC, snapshot.body_accs[i].to_normalized()),
-            snapshot.body_accs[i].magnitude() * 0.2,
-            ARROW_COLOR,
-            ARROW_SHINYNESS,
-        ));
+        // entities.push(Entity::new(
+        //     MESH_ARROW,
+        //     *posit,
+        //     Quaternion::from_unit_vecs(UP_VEC, snapshot.body_accs[i].to_normalized()),
+        //     snapshot.body_accs[i].magnitude() * 0.2,
+        //     ARROW_COLOR,
+        //     ARROW_SHINYNESS,
+        // ));
     }
 
     for cube in &snapshot.tree_cubes {

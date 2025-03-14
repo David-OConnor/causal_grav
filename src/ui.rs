@@ -3,11 +3,16 @@ use std::{path::PathBuf, str::FromStr};
 use barnes_hut::{Cube, Tree};
 use egui::{Color32, ComboBox, Context, RichText, Slider, TopBottomPanel, Ui};
 use graphics::{EngineUpdates, Entity, Scene};
-use lin_alg::f32::{Quaternion, Vec3};
+use lin_alg::{
+    f32::{Quaternion, Vec3},
+    f64::Vec3 as Vec3F64,
+    linspace,
+};
 
 use crate::{
     accel::MondFn,
     build,
+    charge::FieldProperties,
     galaxy_data::GalaxyModel,
     playback::{change_snapshot, SnapShot},
     render::{TREE_COLOR, TREE_CUBE_SCALE_FACTOR, TREE_SHINYNESS},
@@ -268,6 +273,20 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.checkbox(&mut state.ui.draw_tree, "Draw tree");
 
             ui.add_space(COL_SPACING * 2.);
+
+            if ui.button("Field properties").clicked() {
+                let dx = 0.5;
+                for r in linspace(0., 5., 5) {
+                    let point = Vec3F64::new(r, 0., 0.);
+
+                    // todo: After running, this will be the final config.
+                    // let bodies = &state.snapshots[state.ui.snapshot_selected].b
+                    let bodies = &state.bodies;
+
+                    let stats = FieldProperties::new(bodies, point, dx);
+                    println!("\nStats at R={r}: {stats}");
+                }
+            }
 
             if ui
                 .button(RichText::new("Save").color(Color32::GOLD))

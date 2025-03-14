@@ -330,12 +330,12 @@ fn create_body(
     three_d: bool,
     rng: &mut ThreadRng,
 ) -> Body {
-    let θ = rng.gen_range(0.0..TAU);
+    let θ = rng.random_range(0.0..TAU);
 
     let (posit, vel) = if three_d {
         let ϕ = if three_d {
             // Random phi for polar angle with area weighting
-            let u: f64 = rng.gen_range(-1.0..1.0); // Uniform random variable
+            let u: f64 = rng.random_range(-1.0..1.0); // Uniform random variable
             u.acos() // Inverse cosine for area-preserving sampling
         } else {
             0.
@@ -357,7 +357,7 @@ fn create_body(
 
         // Rotate along an arbitrary axis perpendicular to the center.
         let rot_axis = posit.to_normalized();
-        let rotator = Quaternion::from_axis_angle(rot_axis, rng.gen_range(0.0..TAU));
+        let rotator = Quaternion::from_axis_angle(rot_axis, rng.random_range(0.0..TAU));
 
         // Create a unit vector perpendicular to the position.
         let starting_pt = Vec3::new(1., 0., 0.);
@@ -373,7 +373,7 @@ fn create_body(
 
         // todo: Temp mesasure for a finite-thick disk.
         let disk_thickness_div2 = 0.2;
-        let z = rng.gen_range(-disk_thickness_div2..disk_thickness_div2);
+        let z = rng.random_range(-disk_thickness_div2..disk_thickness_div2);
 
         let scale_x = 1.0 - eccentricity; // Eccentricity factor for x-axis
         let posit = Vec3::new(x * scale_x, y, z);
@@ -397,7 +397,7 @@ fn create_body(
 
 /// This (newer, for us) approach  maps out an area for each data piece, and fills it with bodies at random
 /// positions. Position, both angular, and distance-within-ring, are randomized.
-fn make_distrib_data_area(
+pub fn make_distrib_data_area(
     mass_density: &[(f64, f64)],
     vel: &[(f64, f64)],
     mass_total: f64,
@@ -407,7 +407,7 @@ fn make_distrib_data_area(
     v_scaler: f64,
 ) -> Vec<Body> {
     let mut result = Vec::with_capacity(num_bodies);
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // let r_all: Vec<f64> = mass_density.iter().map(|(r, _mass)| r).collect();
     // let dr = r_all[1] - r_all[0];
@@ -482,7 +482,7 @@ fn make_distrib_data_area(
         );
 
         for _ in 0..body_num_this_area {
-            let r_body = rng.gen_range(r_inner..r_outer);
+            let r_body = rng.random_range(r_inner..r_outer);
             let v_mag = interpolate(vel, r_body).unwrap() * v_scaler;
 
             result.push(create_body(

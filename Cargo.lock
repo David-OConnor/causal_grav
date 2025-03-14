@@ -196,7 +196,7 @@ dependencies = [
 
 [[package]]
 name = "barnes_hut"
-version = "1.0.7"
+version = "1.0.8"
 dependencies = [
  "bincode",
  "lin_alg",
@@ -573,15 +573,16 @@ checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
 
 [[package]]
 name = "cuda_setup"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75052c5021985301f9bcf1ae6e8498c03149410c40db332854f8b2ac60099380"
+version = "0.1.1"
+dependencies = [
+ "cudarc",
+]
 
 [[package]]
 name = "cudarc"
-version = "0.13.3"
+version = "0.13.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "712390a76a83255b3d02760b8b3b3b7cb518f1f7cd83aafbbd65c382a7d6e8ef"
+checksum = "486c221362668c63a1636cfa51463b09574433b39029326cff40864b3ba12b6e"
 dependencies = [
  "libloading",
 ]
@@ -1484,6 +1485,7 @@ name = "lin_alg"
 version = "1.1.0"
 dependencies = [
  "bincode",
+ "cudarc",
  "num-traits",
 ]
 

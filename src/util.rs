@@ -119,10 +119,10 @@ pub fn volume_sphere(r: f64) -> f64 {
 }
 
 pub fn random_unit_vec(rng: &mut ThreadRng) -> Vec3 {
-    let θ = rng.gen_range(0.0..TAU);
+    let θ = rng.random_range(0.0..TAU);
 
     // Random phi for polar angle with area weighting
-    let u: f64 = rng.gen_range(-1.0..1.0); // Uniform random variable
+    let u: f64 = rng.random_range(-1.0..1.0); // Uniform random variable
     let ϕ = u.acos(); // Inverse cosine for area-preserving sampling
 
     // Convert spherical coordinates to Cartesian coordinates
