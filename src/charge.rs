@@ -1,11 +1,11 @@
 //! Hijacking this programs' infrastructure to do some electron modelling.
 
-use std::{f64::consts::TAU, fmt, fmt::Formatter};
+use std::{collections::HashMap, f64::consts::TAU, fmt, fmt::Formatter};
 
 use lin_alg::f64::{Quaternion, Vec3};
 use rand::Rng;
 
-use crate::Body;
+use crate::{properties::plot, Body};
 
 pub fn force_coulomb(
     acc_dir: Vec3,
@@ -19,7 +19,7 @@ pub fn force_coulomb(
 
 pub fn make_particles() -> Vec<Body> {
     // todo: Maybe don't make even at R; distribute spacially uniformly.
-    let n_particles = 10_000;
+    let n_particles = 20_000;
     let mut rng = rand::rng();
 
     let mut result = Vec::with_capacity(n_particles);
@@ -69,6 +69,7 @@ pub fn make_particles() -> Vec<Body> {
 
         // let speed = rng.random_range(0.0..1.);
         let speed = 1.;
+        let speed = 0.2;
         let vel = rotator.rotate_vec(tangent_vec) * speed;
 
         // todo: "intertial" mass vs charge...
@@ -94,18 +95,35 @@ pub struct FieldProperties {
     pub avg_accel: Vec3,
     pub accel_divergence: f64,
     pub accel_curl: Vec3,
+    pub num_bodies: usize,
 }
 
 impl fmt::Display for FieldProperties {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        writeln!(f, "V avg: {}", self.avg_vel)?;
+        writeln!(f, "N bodies: {}", self.num_bodies)?;
+        writeln!(
+            f,
+            "V avg: {} mag: {:.3}",
+            self.avg_vel,
+            self.avg_vel.magnitude()
+        )?;
         writeln!(f, "ρ: {}", self.density)?;
-        writeln!(f, "Flux: {}", self.flux)?;
+        writeln!(f, "Flux: {}  mag: {:.3}", self.flux, self.flux.magnitude())?;
         writeln!(f, "∇·F: {:.3}", self.divergence)?;
-        writeln!(f, "∇×F: {}", self.curl)?;
-        writeln!(f, "Acc avg: {}", self.avg_accel)?;
+        writeln!(f, "∇×F: {}  mag: {:.3}", self.curl, self.curl.magnitude())?;
+        writeln!(
+            f,
+            "Acc avg: {}  mag: {:.3}",
+            self.avg_accel,
+            self.avg_accel.magnitude()
+        )?;
         writeln!(f, "Acc ∇·F: {:.3}", self.accel_divergence)?;
-        writeln!(f, "Acc ∇×F: {}", self.accel_curl)?;
+        writeln!(
+            f,
+            "Acc ∇×F: {}  mag: {:.3}",
+            self.accel_curl,
+            self.accel_curl.magnitude()
+        )?;
 
         Ok(())
     }
@@ -113,6 +131,14 @@ impl fmt::Display for FieldProperties {
 
 impl FieldProperties {
     pub fn new(bodies: &[Body], center: Vec3, r: f64) -> Self {
+        let mut num_bodies = 0;
+        for b in bodies {
+            let dist = (b.posit - center).magnitude();
+            if dist <= r {
+                num_bodies += 1;
+            }
+        }
+
         Self {
             avg_vel: average_velocity(bodies, center, r),
             density: get_density(bodies, center, r),
@@ -122,6 +148,7 @@ impl FieldProperties {
             avg_accel: average_acceleration(bodies, center, r),
             accel_divergence: get_accel_divergence(bodies, center, r),
             accel_curl: get_accel_curl(bodies, center, r),
+            num_bodies,
         }
     }
 }
@@ -517,4 +544,87 @@ pub fn get_accel_curl(bodies: &[Body], posit: Vec3, dx: f64) -> Vec3 {
         y: dax_dz - daz_dx,
         z: day_dx - dax_dy,
     }
+}
+
+pub fn plot_field_properties(properties: &HashMap<f64, FieldProperties>) {
+    // Todo: Magnitudes for now; most quantities are vector quantities.
+
+    let mut avg_vel = Vec::new();
+    let mut density = Vec::new();
+    let mut flux = Vec::new();
+    let mut divergence = Vec::new();
+    let mut curl = Vec::new();
+    let mut avg_accel = Vec::new();
+    let mut accel_divergence = Vec::new();
+    let mut accel_curl = Vec::new();
+
+    for (r, props) in properties.iter() {
+        avg_vel.push((*r, props.avg_vel.magnitude()));
+        density.push((*r, props.density));
+        flux.push((*r, props.flux.magnitude()));
+        divergence.push((*r, props.divergence));
+        curl.push((*r, props.curl.magnitude()));
+        avg_accel.push((*r, props.avg_accel.magnitude()));
+        accel_divergence.push((*r, props.accel_divergence));
+        accel_curl.push((*r, props.accel_curl.magnitude()));
+    }
+    // todo: Show in the labels the number of bodies.
+
+    plot(
+        &avg_vel,
+        "r",
+        "|Vel|",
+        &format!("Average velocity"),
+        &format!("average_vel_plot"),
+    );
+
+    plot(
+        &density,
+        "r",
+        "ρ",
+        &format!("Average Density (ρ)"),
+        &format!("average_density_plot"),
+    );
+
+    plot(
+        &flux,
+        "r",
+        "flux",
+        &format!("Average Flux (ρ)"),
+        &format!("flux_plot"),
+    );
+
+    plot(
+        &divergence,
+        "r",
+        "Divergence",
+        &format!("Divergence"),
+        &format!("divergence_plot"),
+    );
+
+    plot(&curl, "r", "Curl", &format!("Curl"), &format!("curl_plot"));
+
+    plot(
+        &avg_accel,
+        "r",
+        "|Accel|",
+        &format!("Average accel"),
+        &format!("average_accel_plot"),
+    );
+
+    plot(
+        &accel_divergence,
+        "r",
+        "Accel divergence",
+        &format!("Accel divergence"),
+        &format!("accel_curl_plot"),
+    );
+
+    plot(
+        &accel_curl,
+        "r",
+        "|Accel curl|",
+        &format!("Accel curl"),
+        &format!("accel_curl_plot"),
+    );
 }

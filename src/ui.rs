@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use barnes_hut::{Cube, Tree};
 use egui::{Color32, ComboBox, Context, RichText, Slider, TopBottomPanel, Ui};
@@ -12,7 +12,7 @@ use lin_alg::{
 use crate::{
     accel::MondFn,
     build,
-    charge::FieldProperties,
+    charge::{plot_field_properties, FieldProperties},
     galaxy_data::GalaxyModel,
     playback::{change_snapshot, SnapShot},
     render::{TREE_COLOR, TREE_CUBE_SCALE_FACTOR, TREE_SHINYNESS},
@@ -276,7 +276,8 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
             if ui.button("Field properties").clicked() {
                 let dx = 0.5;
-                for r in linspace(0., 5., 5) {
+                let mut properties = HashMap::new();
+                for r in linspace(0., 2.5, 12) {
                     let point = Vec3F64::new(r, 0., 0.);
 
                     // todo: After running, this will be the final config.
@@ -285,7 +286,9 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
                     let stats = FieldProperties::new(bodies, point, dx);
                     println!("\nStats at R={r}: {stats}");
+                    properties.insert(r, stats);
                 }
+                plot_field_properties(&properties);
             }
 
             if ui
