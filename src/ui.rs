@@ -275,9 +275,9 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
             ui.add_space(COL_SPACING * 2.);
 
             if ui.button("Field properties").clicked() {
-                let dx = 0.5;
-                let mut properties = HashMap::new();
-                for r in linspace(0., 2.5, 12) {
+                let dx = 0.4;
+                let mut properties = Vec::new();
+                for r in linspace(0., 2.0, 30) {
                     let point = Vec3F64::new(r, 0., 0.);
 
                     // todo: After running, this will be the final config.
@@ -286,7 +286,7 @@ pub fn ui_handler(state: &mut State, ctx: &Context, scene: &mut Scene) -> Engine
 
                     let stats = FieldProperties::new(bodies, point, dx);
                     println!("\nStats at R={r}: {stats}");
-                    properties.insert(r, stats);
+                    properties.push((r, stats));
                 }
                 plot_field_properties(&properties);
             }

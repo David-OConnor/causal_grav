@@ -69,7 +69,7 @@ pub fn make_particles() -> Vec<Body> {
 
         // let speed = rng.random_range(0.0..1.);
         let speed = 1.;
-        let speed = 0.2;
+        let speed = 0.3;
         let vel = rotator.rotate_vec(tangent_vec) * speed;
 
         // todo: "intertial" mass vs charge...
@@ -546,7 +546,7 @@ pub fn get_accel_curl(bodies: &[Body], posit: Vec3, dx: f64) -> Vec3 {
     }
 }
 
-pub fn plot_field_properties(properties: &HashMap<f64, FieldProperties>) {
+pub fn plot_field_properties(properties: &Vec<(f64, FieldProperties)>) {
     // Todo: Magnitudes for now; most quantities are vector quantities.
 
     let mut avg_vel = Vec::new();
@@ -558,7 +558,7 @@ pub fn plot_field_properties(properties: &HashMap<f64, FieldProperties>) {
     let mut accel_divergence = Vec::new();
     let mut accel_curl = Vec::new();
 
-    for (r, props) in properties.iter() {
+    for (r, props) in properties {
         avg_vel.push((*r, props.avg_vel.magnitude()));
         density.push((*r, props.density));
         flux.push((*r, props.flux.magnitude()));
