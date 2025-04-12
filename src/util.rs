@@ -57,14 +57,14 @@ pub fn calc_dt_dynamic(state: &State, bodies_other: &[Body]) -> f64 {
     let mut result = state.config.dt_integration_max;
 
     // todo: Consider cacheing the distances, so this second iteration can be reused.
-    for (id_acted_on, body) in state.bodies.iter().enumerate() {
-        for (i, body_src) in bodies_other.iter().enumerate() {
-            if i == id_acted_on {
+    for (id_tgt, body_tgt) in state.bodies.iter().enumerate() {
+        for (i_src, body_src) in bodies_other.iter().enumerate() {
+            if i_src == id_tgt {
                 continue; // self-interaction.
             }
 
-            let dist = (body_src.posit - body.posit).magnitude();
-            let rel_velocity = (body_src.vel - body.vel).magnitude();
+            let dist = (body_src.posit - body_tgt.posit).magnitude();
+            let rel_velocity = (body_src.vel - body_tgt.vel).magnitude();
             let dt = state.config.dynamic_dt_scaler * dist / rel_velocity;
             if dt < result {
                 result = dt;
@@ -97,7 +97,7 @@ pub fn save<T: Encode>(path: &Path, data: &T) -> io::Result<()> {
 }
 
 /// Load from file, using Bincode. We currently use this for preference files.
-pub fn load<T: Decode>(path: &Path) -> io::Result<T> {
+pub fn load<T: Decode<()>>(path: &Path) -> io::Result<T> {
     let config = config::standard();
 
     let mut file = File::open(path)?;

@@ -12,7 +12,7 @@ use std::{
 use barnes_hut::{BhConfig, BodyModel, Cube, Node, Tree};
 use bincode::{Decode, Encode};
 #[cfg(feature = "cuda")]
-use cudarc::{driver::CudaDevice, nvrtc::Ptx};
+use cudarc::{driver::{CudaContext, CudaStream, CudaModule}, nvrtc::Ptx};
 use galaxy_data::GalaxyModel;
 use grav_shell::{GravShell, MAX_SHELL_R};
 use lin_alg::f64::Vec3;
@@ -22,7 +22,7 @@ use rayon::prelude::*;
 use crate::{
     accel::{acc_newton_inner_with_mond, MondFn},
     body_creation::GalaxyDescrip,
-    charge::force_coulomb,
+    charge::coulomb_force,
     gaussian::GaussianShell,
     grav_shell::COEFF_C,
     integrate::integrate_rk4,
@@ -94,7 +94,7 @@ pub enum ComputationDevice {
     #[default]
     Cpu,
     #[cfg(feature = "cuda")]
-    Gpu(Arc<CudaDevice>),
+    Gpu((Arc<CudaStream>, Arc<CudaModule>)),
 }
 
 // todo: Custom Bincode config that only contains the fields you customize directly.
@@ -309,22 +309,25 @@ fn build(state: &mut State, force_model: ForceModel) {
     // We must refresh bodies prior to building, to reset their positions after the previous update.
     state.refresh_bodies();
 
-    // Allow gravity shells to propogate to reach a steady state, ideally.
-    // todo: make this dynamic
-    let mut farthest_r = 0.;
-    for body in &state.bodies {
-        let r = body.posit.magnitude();
-        if r > farthest_r {
-            farthest_r = r;
+    let mut integrate_start_t = 0.;
+    if force_model == ForceModel::GaussShells {
+        // Allow gravity shells to propogate to reach a steady state, ideally.
+        // todo: make this dynamic
+        let mut farthest_r = 0.;
+        for body in &state.bodies {
+            let r = body.posit.magnitude();
+            if r > farthest_r {
+                farthest_r = r;
+            }
         }
+        // 2x: For the case of opposite sides of circle.
+        farthest_r *= 2.;
+        integrate_start_t = farthest_r / C;
     }
-    // 2x: For the case of opposite sides of circle.
-    farthest_r *= 2.;
-    let integrate_start_t = farthest_r / C;
 
     println!(
-        "T start integration: {:?} T: {:?}. Farthest r: {:.1}",
-        integrate_start_t, state.time_elapsed, farthest_r
+        "T start integration: {:?} T: {:?}",
+        integrate_start_t, state.time_elapsed
     );
 
     let mut start_time_tree = Instant::now();
@@ -418,12 +421,12 @@ fn build(state: &mut State, force_model: ForceModel) {
                     let posit_src = Vec3::new_zero();
                     let q_src = 1.;
 
-                    let acc_diff = posit_src - posit_target;
-                    let dist = acc_diff.magnitude();
+                    let diff: Vec3 = posit_src - posit_target;
+                    let dist = diff.magnitude();
 
-                    let acc_dir = acc_diff / dist; // Unit vec
+                    let dir = diff / dist; // Unit vec
 
-                    let f = force_coulomb(acc_dir, q_src, q_target, dist, cfg.softening_factor_sq);
+                    let f = coulomb_force(dir, q_src, q_target, dist, cfg.softening_factor_sq);
 
                     // todo: Arbitrary inertial mass for now. It is not even meaningful or is it?
                     f / 1.
@@ -573,13 +576,16 @@ fn main() {
     #[cfg(feature = "cuda")]
     let dev = {
         // This is compiled in `build_`.
-        let cuda_dev = CudaDevice::new(0).unwrap();
-        cuda_dev
-            .load_ptx(Ptx::from_file("./cuda.ptx"), "cuda", &["newton_kernel"])
-            .unwrap();
+        let ctx = CudaContext::new(0).unwrap();
+        let stream = ctx.default_stream();
+
+        let module = ctx.load_module(Ptx::from_file("./cuda.ptx")).unwrap();
+
+        // todo: Store/cache this likely.
+        // let func_newton = module.load_function("newton_kernel").unwrap();
 
         // println!("Using the GPU for computations.");
-        ComputationDevice::Gpu(cuda_dev)
+        ComputationDevice::Gpu((stream, module))
     };
 
     #[cfg(not(feature = "cuda"))]

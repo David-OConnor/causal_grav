@@ -55,6 +55,8 @@ pub struct SnapShot {
     pub body_posits: Vec<Vec3f32>,
     // pub V_at_bodies: Vec<Vec3f32>,
     pub body_accs: Vec<Vec3f32>,
+    // todo: Velocity?
+    // pub body_vels: Vec<Vec3f32>,
     // todo: Determine if you want to store and show these.
     // todo: Store a posit and a velocity for rays A/R.
     // The usize is body id.

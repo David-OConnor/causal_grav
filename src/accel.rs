@@ -95,12 +95,12 @@ pub fn calc_acc_shell(
 pub fn acc_newton(
     posit_target: Vec3,
     id_target: usize,
-    bodies_other: &[Body],
+    bodies_src: &[Body],
     mond: Option<MondFn>,
     softening_factor_sq: f64,
 ) -> Vec3 {
     // Compute the result in parallel and then sum the contributions.
-    bodies_other
+    bodies_src
         .par_iter()
         .enumerate()
         .filter_map(|(i, body_source)| {

@@ -7,7 +7,7 @@ use rand::Rng;
 
 use crate::{properties::plot, Body};
 
-pub fn force_coulomb(
+pub fn coulomb_force(
     acc_dir: Vec3,
     q_src: f64,
     q_tgt: f64,
